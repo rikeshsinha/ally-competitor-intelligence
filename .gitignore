@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Local/secret stuff
+.env
+.env.*
+OPENAI_*
+*.key
+
+# Data & large binaries you don't want public
+asin_data_filled.csv
+*.csv
+*.xlsx
+*.parquet
+*.pdf
+*.zip
+
+# Streamlit
+.streamlit/secrets.toml
