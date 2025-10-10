@@ -631,22 +631,48 @@ with st.expander("Detected column mapping"):
     }
     st.write(mapping)
 
-# Simple selection lists
-sku_series = df[sku_col].astype(str).fillna("").str.strip()
-sku_list = [s for s in sku_series.tolist() if s]
+# Simple selection lists (ensure duplicate IDs get suffixed for uniqueness)
+_raw_sku_series = df[sku_col].fillna("")
+sku_series = _raw_sku_series.astype(str).str.strip()
+sku_series = sku_series.replace({"nan": "", "NaN": "", "None": ""})
+_duplicate_counts: Dict[str, int] = {}
+display_skus: List[str] = []
+for idx, sku_val in enumerate(sku_series):
+    base = sku_val
+    label = base if base else "(blank SKU)"
+    count = _duplicate_counts.get(base, 0)
+    display = label if count == 0 else f"{label}_{count}"
+    _duplicate_counts[base] = count + 1
+    display_skus.append(display)
+
+df["_display_sku"] = display_skus
+display_to_index = {label: pos for pos, label in enumerate(display_skus)}
+sku_list = df["_display_sku"].tolist()
+
+if not sku_list:
+    st.warning("No SKU identifiers found in the uploaded file.")
+    st.stop()
+
 selected_client = st.sidebar.selectbox("Select Client SKU", sku_list)
-selected_comp = st.sidebar.selectbox("Select Competitor SKU", sku_list, index=min(1, len(sku_list)-1))
+selected_comp = st.sidebar.selectbox("Select Competitor SKU", sku_list, index=min(1, len(sku_list) - 1))
+
+client_idx = display_to_index.get(selected_client, 0)
+comp_idx = display_to_index.get(selected_comp, min(1, len(sku_list) - 1))
 
 # Extract records
-client_row = df[df[sku_col].astype(str) == str(selected_client)].head(1)
-comp_row = df[df[sku_col].astype(str) == str(selected_comp)].head(1)
+client_row = df.iloc[[client_idx]] if len(df) else df.iloc[[]]
+comp_row = df.iloc[[comp_idx]] if len(df) else df.iloc[[]]
+
+client_original_sku = sku_series.iloc[client_idx] if len(sku_series) > client_idx else ""
+comp_original_sku = sku_series.iloc[comp_idx] if len(sku_series) > comp_idx else ""
 
 if client_row.empty or comp_row.empty:
     st.warning("Please select valid SKUs")
     st.stop()
 
 client_data = {
-    "sku": client_row.iloc[0][sku_col],
+    "sku": selected_client,
+    "sku_original": client_original_sku,
     "title": client_row.iloc[0][title_col],
     "bullets": client_row.iloc[0][bullets_col],
     "description": client_row.iloc[0][desc_col],
@@ -656,7 +682,8 @@ client_data = {
     "universe": client_row.iloc[0][universe_col] if universe_col in df.columns else None,
 }
 comp_data = {
-    "sku": comp_row.iloc[0][sku_col],
+    "sku": selected_comp,
+    "sku_original": comp_original_sku,
     "title": comp_row.iloc[0][title_col],
     "bullets": comp_row.iloc[0][bullets_col],
     "description": comp_row.iloc[0][desc_col],
@@ -670,7 +697,10 @@ comp_data = {
 left, right = st.columns(2)
 with left:
     st.subheader("Client SKU")
-    st.write(f"**SKU**: {client_data['sku']}")
+    client_sku_display = client_data["sku"]
+    if client_data["sku_original"] and client_data["sku_original"] != client_data["sku"]:
+        client_sku_display = f"{client_sku_display} (original: {client_data['sku_original']})"
+    st.write(f"**SKU**: {client_sku_display}")
     st.write(f"**Brand**: {client_data.get('brand','')}")
     st.write(f"**Universe**: {client_data.get('universe', '') or '—'}")
     st.write(f"**Title**: {client_data.get('title','')}")
@@ -684,7 +714,10 @@ with left:
 
 with right:
     st.subheader("Competitor SKU")
-    st.write(f"**SKU**: {comp_data['sku']}")
+    comp_sku_display = comp_data["sku"]
+    if comp_data["sku_original"] and comp_data["sku_original"] != comp_data["sku"]:
+        comp_sku_display = f"{comp_sku_display} (original: {comp_data['sku_original']})"
+    st.write(f"**SKU**: {comp_sku_display}")
     st.write(f"**Brand**: {comp_data.get('brand','')}")
     st.write(f"**Universe**: {comp_data.get('universe', '') or '—'}")
     st.write(f"**Title**: {comp_data.get('title','')}")
