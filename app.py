@@ -34,6 +34,7 @@ Notes
 """
 
 from __future__ import annotations
+import hashlib
 import os
 import re
 import json
@@ -42,6 +43,8 @@ from typing import List, Dict, Any, Optional, Tuple
 
 import pandas as pd
 import streamlit as st
+
+from chains.rule_extractor import extract_rules_config
 
 # Optional OpenAI SDK (gracefully handle if not installed or no key)
 try:
@@ -52,7 +55,7 @@ except Exception:  # pragma: no cover
 # ---------------------------
 # Constants & Rulebook (from PDF)
 # ---------------------------
-RULES: Dict[str, Any] = {
+DEFAULT_RULES: Dict[str, Any] = {
     "title": {
         "max_chars": 50,  # Pet Supplies guide (UAE)
         "brand_required": True,
@@ -85,6 +88,13 @@ RULES: Dict[str, Any] = {
         "no_text_watermarks": True,  # can’t verify programmatically here
     },
 }
+
+
+def get_rules() -> Dict[str, Any]:
+    cfg = st.session_state.get("rules_config")
+    if isinstance(cfg, dict):
+        return cfg
+    return DEFAULT_RULES
 
 EXCEPTIONS_LOWERCASE_WORDS = {
     "and", "or", "for", "the", "a", "an", "in", "on", "over", "with", "to", "of"
@@ -246,26 +256,27 @@ def enforce_title_caps(text: str) -> str:
 
 
 def rule_check_title(title: str, brand: str, is_bundle: bool = False) -> Tuple[int, List[str]]:
+    rules = get_rules()
     score = 100
     issues = []
     if not isinstance(title, str) or not title.strip():
         return 0, ["Title is missing"]
     t = title.strip()
     # length
-    if len(t) > RULES["title"]["max_chars"]:
-        issues.append(f"Title exceeds {RULES['title']['max_chars']} characters (len={len(t)})")
+    if len(t) > rules["title"]["max_chars"]:
+        issues.append(f"Title exceeds {rules['title']['max_chars']} characters (len={len(t)})")
         score -= 25
     # brand presence
-    if RULES["title"]["brand_required"] and isinstance(brand, str) and brand.strip():
+    if rules["title"]["brand_required"] and isinstance(brand, str) and brand.strip():
         if brand.lower() not in t.lower():
             issues.append("Brand name is missing from title")
             score -= 20
     # promo text
-    if RULES["title"]["no_promo"] and has_promo_terms(t):
+    if rules["title"]["no_promo"] and has_promo_terms(t):
         issues.append("Remove promotional language in title")
         score -= 15
     # all caps
-    if RULES["title"]["no_all_caps"] and is_all_caps(t):
+    if rules["title"]["no_all_caps"] and is_all_caps(t):
         issues.append("Avoid ALL CAPS in title")
         score -= 10
     # (pack of X) handling (informational only)
@@ -276,45 +287,47 @@ def rule_check_title(title: str, brand: str, is_bundle: bool = False) -> Tuple[i
 
 
 def rule_check_bullets(bullets: List[str]) -> Tuple[int, List[str]]:
+    rules = get_rules()
     score = 100
     issues = []
     if not bullets:
         return 0, ["No bullets present (aim for up to 5 key features)"]
-    if len(bullets) > RULES["bullets"]["max_count"]:
-        issues.append(f"Too many bullets: {len(bullets)} (max {RULES['bullets']['max_count']})")
+    if len(bullets) > rules["bullets"]["max_count"]:
+        issues.append(f"Too many bullets: {len(bullets)} (max {rules['bullets']['max_count']})")
         score -= 15
     # Validate each bullet
     for i, b in enumerate(bullets, 1):
         if not b:
             continue
         # starting capital
-        if RULES["bullets"]["start_capital"] and b[0].isalpha() and not b[0].isupper():
+        if rules["bullets"]["start_capital"] and b[0].isalpha() and not b[0].isupper():
             issues.append(f"Bullet {i}: start with a capital letter")
             score -= 5
         # ending punctuation
-        if RULES["bullets"]["no_end_punct"] and re.search(r"[.!?]$", b.strip()):
+        if rules["bullets"]["no_end_punct"] and re.search(r"[.!?]$", b.strip()):
             issues.append(f"Bullet {i}: remove ending punctuation")
             score -= 3
         # promo/seller info
-        if RULES["bullets"]["no_promo_or_seller_info"] and has_promo_terms(b):
+        if rules["bullets"]["no_promo_or_seller_info"] and has_promo_terms(b):
             issues.append(f"Bullet {i}: remove promotional messaging")
             score -= 5
     return max(score, 0), issues
 
 
 def rule_check_description(desc: str) -> Tuple[int, List[str]]:
+    rules = get_rules()
     score = 100
     issues = []
     if not isinstance(desc, str) or not desc.strip():
         return 0, ["Description is missing (<= 200 chars)"]
     d = desc.strip()
-    if len(d) > RULES["description"]["max_chars"]:
-        issues.append(f"Description exceeds {RULES['description']['max_chars']} characters (len={len(d)})")
+    if len(d) > rules["description"]["max_chars"]:
+        issues.append(f"Description exceeds {rules['description']['max_chars']} characters (len={len(d)})")
         score -= 20
-    if RULES["description"]["no_promo"] and has_promo_terms(d):
+    if rules["description"]["no_promo"] and has_promo_terms(d):
         issues.append("Remove promotional language in description")
         score -= 10
-    if RULES["description"]["sentence_caps"] and is_all_caps(d):
+    if rules["description"]["sentence_caps"] and is_all_caps(d):
         issues.append("Avoid ALL CAPS in description")
         score -= 5
     return max(score, 0), issues
@@ -326,6 +339,8 @@ def compare_fields(client: Dict[str, Any], comp: Dict[str, Any]) -> Dict[str, An
 
     client_images = count_images(client.get("image_urls", ""))
     comp_images = count_images(comp.get("image_urls", ""))
+
+    rules = get_rules()
 
     title_score, title_issues = rule_check_title(client.get("title", ""), client.get("brand", ""))
     bullets_score, bullets_issues = rule_check_bullets(client_bullets)
@@ -356,7 +371,7 @@ def compare_fields(client: Dict[str, Any], comp: Dict[str, Any]) -> Dict[str, An
         "images": {
             "client_count": client_images,
             "comp_count": comp_images,
-            "issues": [] if client_images >= RULES["images"]["min_count"] else ["Add at least one image"],
+            "issues": [] if client_images >= rules["images"]["min_count"] else ["Add at least one image"],
         },
         "universe": uni,
     }
@@ -384,9 +399,8 @@ def compare_fields(client: Dict[str, Any], comp: Dict[str, Any]) -> Dict[str, An
 
 SYSTEM_PROMPT = (
     "You are a meticulous Amazon PDP content editor for Pet Supplies. "
-    "Follow the provided style rules strictly (title<=50 chars; up to 5 bullets; description<=200 chars; "
-    "no promotional or seller info; start bullets with a capital letter; avoid ending punctuation; keep sentences clear). "
-    "Return compliant copy and explain briefly how each edit improves against the competitor."
+    "Follow the provided style rules strictly. Return compliant copy and explain briefly how each edit improves "
+    "against the competitor."
 )
 
 USER_PROMPT_TEMPLATE = (
@@ -400,10 +414,7 @@ USER_PROMPT_TEMPLATE = (
     "- Bullets: {k_bullets}\n"
     "- Description: {k_desc}\n"
     "\n"
-    "Rules summary:\n"
-    "- Title: <=50 chars, include brand, no ALL CAPS, no promo, '(pack of X)' only for bundles.\n"
-    "- Bullets: up to 5; start with capital; sentence fragments; no ending punctuation; no promo/seller info.\n"
-    "- Description: <=200 chars; no promo or seller info; truthful claims; avoid ALL CAPS.\n"
+    "Rules JSON (style guide extraction):\n{rule_json}\n"
     "\n"
     "TASK: Propose an improved TITLE, 3-5 BULLETS, and a short DESCRIPTION for the CLIENT that are compliant.\n"
     "Also provide a brief rationale for each change that references what the competitor does.\n"
@@ -443,6 +454,7 @@ def validate_openai_key() -> Tuple[bool, str]:
 
 
 def call_llm(client_data: Dict[str, Any], comp_data: Dict[str, Any]) -> Dict[str, Any]:
+    rules = get_rules()
     client = get_openai_client()
     prompt = USER_PROMPT_TEMPLATE.format(
         brand=client_data.get("brand", ""),
@@ -453,6 +465,7 @@ def call_llm(client_data: Dict[str, Any], comp_data: Dict[str, Any]) -> Dict[str
         k_title=comp_data.get("title", ""),
         k_bullets=split_bullets(comp_data.get("bullets", "")),
         k_desc=comp_data.get("description", ""),
+        rule_json=json.dumps(rules, indent=2, sort_keys=True),
     )
 
     if client is None:
@@ -465,7 +478,7 @@ def call_llm(client_data: Dict[str, Any], comp_data: Dict[str, Any]) -> Dict[str
             title = f"{base_brand} " + raw_title
         else:
             title = raw_title
-        title = enforce_title_caps(title)[: RULES["title"]["max_chars"]].strip()
+        title = enforce_title_caps(title)[: rules["title"]["max_chars"]].strip()
         # Bullets heuristic: take up to 5, strip punctuation at end, capitalize first letter
         fixed_bullets: List[str] = []
         for b in bullets[:5] or ["Durable construction", "Comfortable fit", "Easy to clean"]:
@@ -478,15 +491,15 @@ def call_llm(client_data: Dict[str, Any], comp_data: Dict[str, Any]) -> Dict[str
         desc = (client_data.get("description") or "").strip()
         if not desc:
             desc = "Compact design for everyday use; easy to clean; ideal for most pets"
-        desc = desc[: RULES["description"]["max_chars"]]
+        desc = desc[: rules["description"]["max_chars"]]
         return {
             "title_edit": title,
             "bullets_edits": fixed_bullets,
             "description_edit": desc,
             "rationales": [
-                "Ensure brand appears in title and stays within 50 characters",
-                "Use 3–5 concise bullets starting with a capital letter, no ending punctuation",
-                "Short description (<=200 chars) with clear benefit; remove promo language if present",
+                f"Ensure brand appears in title and stays within {rules['title']['max_chars']} characters",
+                f"Use up to {rules['bullets']['max_count']} concise bullets starting with a capital letter, no ending punctuation",
+                f"Short description (<= {rules['description']['max_chars']} chars) with clear benefit; remove promo language if present",
             ],
             "_llm": False,
         }
@@ -509,9 +522,9 @@ def call_llm(client_data: Dict[str, Any], comp_data: Dict[str, Any]) -> Dict[str
     except Exception as e:
         # Fallback to heuristic
         return {
-            "title_edit": enforce_title_caps((client_data.get("title") or "")[: RULES["title"]["max_chars"]]),
+            "title_edit": enforce_title_caps((client_data.get("title") or "")[: rules["title"]["max_chars"]]),
             "bullets_edits": ["Durable construction", "Comfortable fit", "Easy to clean"],
-            "description_edit": "Compact design for everyday use; easy to clean; ideal for most pets"[: RULES["description"]["max_chars"]],
+            "description_edit": "Compact design for everyday use; easy to clean; ideal for most pets"[: rules["description"]["max_chars"]],
             "rationales": ["LLM error; generated heuristic placeholders"],
             "_llm": False,
         }
@@ -544,6 +557,13 @@ st.markdown(
 )
 
 st.title("Competitor Content Intelligence — Ally skill demo")
+
+if "rules_config" not in st.session_state:
+    st.session_state["rules_config"] = json.loads(json.dumps(DEFAULT_RULES))
+    st.session_state["rules_source"] = "Built-in defaults"
+    st.session_state["rules_parse_messages"] = []
+
+rules_status_messages: List[Tuple[str, str]] = []
 
 with st.expander("About this demo"):
     st.markdown(
@@ -578,6 +598,49 @@ else:
 
 # Sidebar: file inputs
 st.sidebar.header("Inputs")
+rules_file = st.sidebar.file_uploader("Upload Rules PDF", type=["pdf"], key="rules_pdf")
+if rules_file is not None:
+    pdf_bytes = rules_file.getvalue()
+    digest = hashlib.md5(pdf_bytes).hexdigest()
+    if digest != st.session_state.get("rules_pdf_digest"):
+        with st.spinner("Extracting rules from PDF..."):
+            parsed_rules, parse_errors = extract_rules_config(pdf_bytes, get_openai_client(), DEFAULT_RULES)
+        st.session_state["rules_config"] = parsed_rules
+        st.session_state["rules_pdf_digest"] = digest
+        st.session_state["rules_parse_messages"] = parse_errors
+        st.session_state["rules_source"] = f"Uploaded PDF ({rules_file.name})" if rules_file.name else "Uploaded PDF"
+    current_errors = st.session_state.get("rules_parse_messages", [])
+    if current_errors:
+        rules_status_messages.extend(("warning", msg) for msg in current_errors)
+    else:
+        rules_status_messages.append(("success", f"Rules extracted from {st.session_state.get('rules_source', 'uploaded PDF')}"))
+else:
+    current_errors = st.session_state.get("rules_parse_messages", [])
+    if current_errors:
+        rules_status_messages.extend(("warning", msg) for msg in current_errors)
+    source = st.session_state.get("rules_source", "Built-in defaults")
+    if not current_errors:
+        if source == "Built-in defaults":
+            rules_status_messages.append(("info", "Using built-in Pet Supplies rules"))
+        else:
+            rules_status_messages.append(("info", f"Using rules from {source}"))
+
+if rules_status_messages:
+    seen_msgs = set()
+    for level, msg in rules_status_messages:
+        if msg in seen_msgs:
+            continue
+        seen_msgs.add(msg)
+        if level == "success":
+            st.sidebar.success(msg)
+        elif level == "warning":
+            st.sidebar.warning(msg)
+        else:
+            st.sidebar.info(msg)
+
+with st.sidebar.expander("Active rules JSON"):
+    st.json(get_rules())
+
 csv_file = st.sidebar.file_uploader("Upload SKUs CSV (asin_data_filled.csv)", type=["csv"], key="csv_uploader")
 
 # Load data (require upload; no default path fallback)
@@ -733,15 +796,31 @@ st.divider()
 
 # Rule checks & summary
 summary = compare_fields(client_data, comp_data)
+rules_for_display = get_rules()
+title_limit = rules_for_display["title"]["max_chars"]
+bullet_limit = rules_for_display["bullets"]["max_count"]
+desc_limit = rules_for_display["description"]["max_chars"]
 
 st.subheader("Rule checks (Client)")
 col1, col2, col3, col4, col5 = st.columns(5)
 with col1:
-    st.metric("Title score", summary["title"]["client_score"], help="Length, brand present, no promo, no ALL CAPS")
+    st.metric(
+        "Title score",
+        summary["title"]["client_score"],
+        help=f"Length ≤ {title_limit}, brand present, no promo, no ALL CAPS",
+    )
 with col2:
-    st.metric("Bullets score", summary["bullets"]["client_score"], help="<=5, start caps, no end punctuation, no promo")
+    st.metric(
+        "Bullets score",
+        summary["bullets"]["client_score"],
+        help=f"≤{bullet_limit}, start caps, no end punctuation, no promo",
+    )
 with col3:
-    st.metric("Description score", summary["description"]["client_score"], help="<=200 chars, no promo, no ALL CAPS")
+    st.metric(
+        "Description score",
+        summary["description"]["client_score"],
+        help=f"≤{desc_limit} chars, no promo, no ALL CAPS",
+    )
 with col4:
     st.metric("Images (client vs comp)", f"{summary['images']['client_count']} vs {summary['images']['comp_count']}")
 with col5:
@@ -799,22 +878,26 @@ if st.button("Draft compliant edits with LLM / heuristic"):
 
 if "llm_out" in st.session_state:
     out = st.session_state["llm_out"]
+    rules = get_rules()
+    title_max = rules["title"]["max_chars"]
+    bullet_max = rules["bullets"]["max_count"]
+    desc_max = rules["description"]["max_chars"]
     st.markdown("**Proposed Title**")
     st.code(out.get("title_edit", ""))
 
-    st.markdown("**Proposed Bullets (3–5)**")
-    for b in out.get("bullets_edits", [])[:5]:
+    st.markdown(f"**Proposed Bullets (up to {bullet_max})**")
+    for b in out.get("bullets_edits", [])[: bullet_max]:
         st.write(f"• {re.sub(r'[.!?]+$', '', b).strip()}")
 
-    st.markdown("**Proposed Description (<=200 chars)**")
-    st.code((out.get("description_edit", ""))[: RULES["description"]["max_chars"]])
+    st.markdown(f"**Proposed Description (<= {desc_max} chars)**")
+    st.code((out.get("description_edit", ""))[: desc_max])
 
     if out.get("rationales"):
         with st.expander("Why these edits?"):
             for r in out["rationales"]:
                 st.write("- ", r)
 
-    st.caption("Source: Amazon Pet Supplies style guide rules encoded in app")
+    st.caption(f"Source: {st.session_state.get('rules_source', 'Style guide rules')}")
 
     approved = st.checkbox("I approve these edits and confirm they follow brand & Amazon rules")
     if approved:
@@ -824,10 +907,10 @@ if "llm_out" in st.session_state:
         final_md.append("\n## Title (proposed)\n")
         final_md.append(out.get("title_edit", ""))
         final_md.append("\n## Bullets (proposed)\n")
-        for b in out.get("bullets_edits", [])[:5]:
+        for b in out.get("bullets_edits", [])[: bullet_max]:
             final_md.append(f"- {re.sub(r'[.!?]+$','', b).strip()}")
         final_md.append("\n\n## Description (proposed)\n")
-        final_md.append((out.get("description_edit", ""))[: RULES["description"]["max_chars"]])
+        final_md.append((out.get("description_edit", ""))[: desc_max])
 
         uni = summary.get("universe", {})
         if uni.get("suggested"):
@@ -841,9 +924,20 @@ if "llm_out" in st.session_state:
 
         final_md.append("\n\n## Rationale & Rule Compliance\n")
         final_md.append(
-            "- Title ≤ 50 chars, includes brand, avoids ALL CAPS & promo\n"
-            "- Up to 5 bullets; capitalized starts; no ending punctuation; no promo/seller info\n"
-            "- Description ≤ 200 chars; plain language; no promo/seller info"
+            f"- Title ≤ {title_max} chars; "
+            f"{'brand required' if rules['title']['brand_required'] else 'brand optional'}; "
+            f"{'avoid ALL CAPS' if rules['title']['no_all_caps'] else 'ALL CAPS allowed'}; "
+            f"{'no promo language' if rules['title']['no_promo'] else 'promo allowed'}"
+        )
+        final_md.append(
+            f"- Up to {bullet_max} bullets; {'start with capitals' if rules['bullets']['start_capital'] else 'any case allowed'}; "
+            f"{'no ending punctuation' if rules['bullets']['no_end_punct'] else 'ending punctuation allowed'}; "
+            f"{'no promo/seller info' if rules['bullets']['no_promo_or_seller_info'] else 'promo allowed'}"
+        )
+        final_md.append(
+            f"- Description ≤ {desc_max} chars; "
+            f"{'no promo language' if rules['description']['no_promo'] else 'promo allowed'}; "
+            f"{'avoid ALL CAPS' if rules['description']['sentence_caps'] else 'ALL CAPS allowed'}"
         )
         for r in out.get("rationales", []):
             final_md.append(f"- {r}")
@@ -860,7 +954,7 @@ Subject: Approved PDP Edits for SKU {client_data['sku']}
 
 Hi team,
 
-Please find the approved PDP content updates for SKU {client_data['sku']} below. These adhere to the Pet Supplies style guide (title≤50, ≤5 bullets, description≤200; no promo/seller info).
+Please find the approved PDP content updates for SKU {client_data['sku']} below. These adhere to the style guide (title≤{title_max}, ≤{bullet_max} bullets, description≤{desc_max}; no promo/seller info when restricted).
 
 Title
 -----
@@ -868,11 +962,11 @@ Title
 
 Bullets
 -------
-{chr(10).join([f"- {re.sub(r'[.!?]+$','', b).strip()}" for b in out.get('bullets_edits', [])[:5]])}
+{chr(10).join([f"- {re.sub(r'[.!?]+$','', b).strip()}" for b in out.get('bullets_edits', [])[: bullet_max]])}
 
 Description
 ----------
-{(out.get('description_edit',''))[: RULES['description']['max_chars']]}
+{(out.get('description_edit',''))[: desc_max]}
 
 Rationale
 ---------
