@@ -801,9 +801,24 @@ title_limit = rules_for_display["title"]["max_chars"]
 bullet_limit = rules_for_display["bullets"]["max_count"]
 desc_limit = rules_for_display["description"]["max_chars"]
 
+rules_source = st.session_state.get("rules_source", "Built-in defaults")
+rules_notes = st.session_state.get("rules_parse_messages", [])
+
+def _format_rules_notes(notes: Any) -> str:
+    if not notes:
+        return ""
+    if isinstance(notes, (list, tuple)):
+        filtered = [str(n) for n in notes if n]
+        return "; ".join(filtered)
+    return str(notes)
+
+formatted_rules_notes = _format_rules_notes(rules_notes)
+
 st.subheader("Rule checks (Client)")
-if rule_result.notes:
-    st.caption(f"Rules source: {rule_result.source} — {rule_result.notes}")
+if formatted_rules_notes:
+    st.caption(f"Rules source: {rules_source} — {formatted_rules_notes}")
+else:
+    st.caption(f"Rules source: {rules_source}")
 col1, col2, col3, col4, col5 = st.columns(5)
 with col1:
     st.metric(
