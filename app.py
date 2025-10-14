@@ -46,6 +46,7 @@ from core.content_rules import (
     compare_fields,
     count_images,
     enforce_title_caps,
+    extract_image_urls,
     split_bullets,
 )
 from graph.product_validation import build_product_validation_graph
@@ -378,8 +379,12 @@ with left:
         st.write(f"• {b}")
     st.write("**Description**:")
     st.write(client_data.get("description", ""))
+    client_image_urls = extract_image_urls(client_data.get("image_urls", ""))
     st.write("**Images (count)**:")
-    st.write(count_images(client_data.get("image_urls", "")))
+    st.write(len(client_image_urls))
+    if client_image_urls:
+        st.write("**Image URLs:**")
+        st.markdown("\n".join(f"- {url}" for url in client_image_urls))
 
 with right:
     st.subheader("Competitor SKU")
@@ -396,8 +401,12 @@ with right:
         st.write(f"• {b}")
     st.write("**Description**:")
     st.write(comp_data.get("description", ""))
+    comp_image_urls = extract_image_urls(comp_data.get("image_urls", ""))
     st.write("**Images (count)**:")
-    st.write(count_images(comp_data.get("image_urls", "")))
+    st.write(len(comp_image_urls))
+    if comp_image_urls:
+        st.write("**Image URLs:**")
+        st.markdown("\n".join(f"- {url}" for url in comp_image_urls))
 
 st.divider()
 
