@@ -103,26 +103,11 @@ def split_bullets(raw: Any) -> List[str]:
     return _coerce_string_list(raw)
 
 
-def _count_urls_from_text(text: str) -> int:
-    pieces = re.split(r"[\s,|]+", text)
-    return len(
-        [p for p in pieces if p.lower().endswith((".jpg", ".jpeg", ".png", ".webp"))]
-    )
-
-
 def count_images(raw: Any) -> int:
+    """Count images by the number of URLs provided in the list-like field."""
+
     urls = _coerce_string_list(raw)
-    if urls:
-        if isinstance(raw, str):
-            stripped = raw.strip()
-            if urls == [stripped]:
-                fallback = _count_urls_from_text(stripped)
-                if fallback:
-                    return fallback
-        return sum(1 for url in urls if str(url).strip())
-    if not isinstance(raw, str) or not raw.strip():
-        return 0
-    return _count_urls_from_text(raw.strip())
+    return sum(1 for url in urls if str(url).strip())
 
 
 def has_promo_terms(text: str) -> bool:
