@@ -42,6 +42,7 @@ from dataclasses import dataclass
 from typing import List, Dict, Any, Optional, Tuple
 
 import streamlit as st
+import pandas as pd
 
 from chains.rule_extractor import extract_rules_config
 
