@@ -106,7 +106,11 @@ def split_bullets(raw: Any) -> List[str]:
 def _count_urls_from_text(text: str) -> int:
     pieces = re.split(r"[\s,|]+", text)
     return len(
-        [p for p in pieces if p.lower().endswith((".jpg", ".jpeg", ".png", ".webp"))]
+        [
+            p
+            for p in pieces
+            if p.lower().endswith((".jpg", ".jpeg", ".png", ".webp", ".res"))
+        ]
     )
 
 
@@ -116,6 +120,15 @@ def count_images(raw: Any) -> int:
         if isinstance(raw, str):
             stripped = raw.strip()
             if urls == [stripped]:
+                if stripped.startswith("[") and stripped.endswith("]"):
+                    inner = stripped[1:-1]
+                    approx_items = [
+                        part.strip().strip('"').strip("'")
+                        for part in re.split(r"\s*,\s*", inner)
+                        if part.strip().strip('"').strip("'")
+                    ]
+                    if approx_items:
+                        return len(approx_items)
                 fallback = _count_urls_from_text(stripped)
                 if fallback:
                     return fallback
