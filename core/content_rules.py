@@ -1,6 +1,8 @@
 """Reusable content validation helpers and rule definitions."""
 from __future__ import annotations
 
+import ast
+import json
 from dataclasses import dataclass
 import re
 from typing import Any, Dict, Iterable, List, Optional, Tuple
@@ -182,19 +184,29 @@ UNIVERSE_KEYWORDS: Dict[str, List[str]] = {
 }
 
 
-def split_bullets(raw: str) -> List[str]:
-    if not isinstance(raw, str) or not raw.strip():
+def split_bullets(raw: Any) -> List[str]:
+    if isinstance(raw, list):
+        return [str(item).strip() for item in raw if str(item).strip()]
+
+    if not isinstance(raw, str):
         return []
-    candidates = ["\n", "||", "|", "•", ";", " • "]
-    for delim in candidates:
-        if delim in raw:
-            parts = [p.strip() for p in raw.split(delim) if p.strip()]
-            if len(parts) > 1:
-                return parts
-    if "." in raw and len(raw) > 120:
-        parts = [p.strip() for p in raw.split(".") if p.strip()]
-        return parts[:5]
-    return [raw.strip()]
+
+    stripped = raw.strip()
+    if not stripped:
+        return []
+
+    try:
+        parsed = json.loads(stripped)
+    except (json.JSONDecodeError, TypeError):
+        try:
+            parsed = ast.literal_eval(stripped)
+        except (ValueError, SyntaxError):
+            parsed = None
+
+    if isinstance(parsed, list):
+        return [str(item).strip() for item in parsed if str(item).strip()]
+
+    return [stripped] if stripped else []
 
 
 def count_images(raw: str) -> int:
