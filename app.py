@@ -883,7 +883,7 @@ _mode = "OpenAI (validated)" if st.session_state.get("openai_valid") else ("Open
 st.caption(f"Mode: {_mode}")
 if st.button("Draft compliant edits with LLM / heuristic"):
     with st.spinner("Generating suggestions..."):
-        llm_out = call_llm(client_data, comp_data, active_rules)
+        llm_out = call_llm(client_data, comp_data)
     st.session_state["llm_out"] = llm_out
     if llm_out.get("_llm"):
         st.success("Used OpenAI LLM")
