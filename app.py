@@ -217,21 +217,43 @@ def call_llm(
 
 st.set_page_config(page_title="Competitor Content Intelligence", layout="wide")
 
-# --- High-contrast fix for selectbox in dark mode ---
+# --- High-contrast styling for selectbox across themes ---
 st.markdown(
     """
     <style>
-    /* Selected value text inside the selectbox control */
-    .stSelectbox [data-baseweb="select"] > div { color: #ffffff !important; }
-    .stSelectbox [data-baseweb="select"] span { color: #ffffff !important; }
+    :root {
+        --_ally-select-fg: var(--text-color, #111111);
+        --_ally-select-bg: var(--background-color, #ffffff);
+        --_ally-select-bg-active: var(--secondary-background-color, #f3f4f6);
+        --_ally-select-muted: var(--secondary-text-color, #6b7280);
+    }
 
-    /* The dropdown menu portal */
-    [data-baseweb="menu"] { background-color: #ffffff !important; color: #111111 !important; }
-    [data-baseweb="menu"] [role="option"] { color: #111111 !important; }
-    [data-baseweb="menu"] [aria-selected="true"] { background-color: #f3f4f6 !important; }
+    .stSelectbox [data-baseweb="select"] > div {
+        color: var(--_ally-select-fg) !important;
+        background-color: var(--_ally-select-bg) !important;
+    }
 
-    /* Placeholder */
-    .stSelectbox [data-baseweb="select"] [aria-hidden="true"] { color: #e5e7eb !important; }
+    .stSelectbox [data-baseweb="select"] span {
+        color: var(--_ally-select-fg) !important;
+    }
+
+    .stSelectbox [data-baseweb="select"] [aria-hidden="true"] {
+        color: var(--_ally-select-muted) !important;
+    }
+
+    [data-baseweb="menu"] {
+        background-color: var(--_ally-select-bg) !important;
+        color: var(--_ally-select-fg) !important;
+    }
+
+    [data-baseweb="menu"] [role="option"] {
+        color: var(--_ally-select-fg) !important;
+    }
+
+    [data-baseweb="menu"] [aria-selected="true"] {
+        background-color: var(--_ally-select-bg-active) !important;
+        color: var(--_ally-select-fg) !important;
+    }
     </style>
     """,
     unsafe_allow_html=True,
