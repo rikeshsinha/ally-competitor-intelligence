@@ -44,8 +44,8 @@ import streamlit as st
 from core.content_rules import (
     DEFAULT_RULES,
     compare_fields,
-    count_images,
     enforce_title_caps,
+    extract_image_urls,
     split_bullets,
 )
 from graph.product_validation import build_product_validation_graph
@@ -378,8 +378,15 @@ with left:
         st.write(f"• {b}")
     st.write("**Description**:")
     st.write(client_data.get("description", ""))
-    st.write("**Images (count)**:")
-    st.write(count_images(client_data.get("image_urls", "")))
+    client_image_urls = extract_image_urls(client_data.get("image_urls", ""))
+    client_image_count = len(client_image_urls)
+    st.write("**Images**:")
+    st.write(f"Total: {client_image_count}")
+    if client_image_urls:
+        for idx, url in enumerate(client_image_urls, 1):
+            st.markdown(f"{idx}. [{url}]({url})")
+    else:
+        st.markdown("_No image URLs provided._")
 
 with right:
     st.subheader("Competitor SKU")
@@ -396,8 +403,15 @@ with right:
         st.write(f"• {b}")
     st.write("**Description**:")
     st.write(comp_data.get("description", ""))
-    st.write("**Images (count)**:")
-    st.write(count_images(comp_data.get("image_urls", "")))
+    comp_image_urls = extract_image_urls(comp_data.get("image_urls", ""))
+    comp_image_count = len(comp_image_urls)
+    st.write("**Images**:")
+    st.write(f"Total: {comp_image_count}")
+    if comp_image_urls:
+        for idx, url in enumerate(comp_image_urls, 1):
+            st.markdown(f"{idx}. [{url}]({url})")
+    else:
+        st.markdown("_No image URLs provided._")
 
 st.divider()
 
