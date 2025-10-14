@@ -103,26 +103,38 @@ def split_bullets(raw: Any) -> List[str]:
     return _coerce_string_list(raw)
 
 
-def _count_urls_from_text(text: str) -> int:
+def _extract_urls_from_text(text: str) -> List[str]:
     pieces = re.split(r"[\s,|]+", text)
-    return len(
-        [p for p in pieces if p.lower().endswith((".jpg", ".jpeg", ".png", ".webp"))]
-    )
+    return [
+        p
+        for p in pieces
+        if p and p.lower().endswith((".jpg", ".jpeg", ".png", ".webp"))
+    ]
 
 
-def count_images(raw: Any) -> int:
+def _count_urls_from_text(text: str) -> int:
+    return len(_extract_urls_from_text(text))
+
+
+def extract_image_urls(raw: Any) -> List[str]:
     urls = _coerce_string_list(raw)
     if urls:
         if isinstance(raw, str):
             stripped = raw.strip()
             if urls == [stripped]:
-                fallback = _count_urls_from_text(stripped)
-                if fallback:
-                    return fallback
-        return sum(1 for url in urls if str(url).strip())
-    if not isinstance(raw, str) or not raw.strip():
-        return 0
-    return _count_urls_from_text(raw.strip())
+                fallback_urls = _extract_urls_from_text(stripped)
+                if fallback_urls:
+                    return fallback_urls
+        return [str(url).strip() for url in urls if str(url).strip()]
+    if isinstance(raw, str):
+        stripped = raw.strip()
+        if stripped:
+            return _extract_urls_from_text(stripped)
+    return []
+
+
+def count_images(raw: Any) -> int:
+    return len(extract_image_urls(raw))
 
 
 def has_promo_terms(text: str) -> bool:
@@ -237,8 +249,10 @@ def compare_fields(
     client_bullets = split_bullets(client.get("bullets", ""))
     comp_bullets = split_bullets(comp.get("bullets", ""))
 
-    client_images = count_images(client.get("image_urls", ""))
-    comp_images = count_images(comp.get("image_urls", ""))
+    client_image_urls = extract_image_urls(client.get("image_urls", ""))
+    comp_image_urls = extract_image_urls(comp.get("image_urls", ""))
+    client_images = len(client_image_urls)
+    comp_images = len(comp_image_urls)
 
     title_score, title_issues = rule_check_title(
         client.get("title", ""), client.get("brand", ""), rules.get("title", {})
