@@ -41,7 +41,6 @@ import json
 from dataclasses import dataclass
 from typing import List, Dict, Any, Optional, Tuple
 
-import pandas as pd
 import streamlit as st
 
 from chains.rule_extractor import extract_rules_config
@@ -802,6 +801,8 @@ bullet_limit = rules_for_display["bullets"]["max_count"]
 desc_limit = rules_for_display["description"]["max_chars"]
 
 st.subheader("Rule checks (Client)")
+if rule_result.notes:
+    st.caption(f"Rules source: {rule_result.source} — {rule_result.notes}")
 col1, col2, col3, col4, col5 = st.columns(5)
 with col1:
     st.metric(
@@ -866,7 +867,7 @@ _mode = "OpenAI (validated)" if st.session_state.get("openai_valid") else ("Open
 st.caption(f"Mode: {_mode}")
 if st.button("Draft compliant edits with LLM / heuristic"):
     with st.spinner("Generating suggestions..."):
-        llm_out = call_llm(client_data, comp_data)
+        llm_out = call_llm(client_data, comp_data, active_rules)
     st.session_state["llm_out"] = llm_out
     if llm_out.get("_llm"):
         st.success("Used OpenAI LLM")
