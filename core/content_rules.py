@@ -57,37 +57,62 @@ EXCEPTIONS_LOWERCASE_WORDS = {
 }
 
 
-def split_bullets(raw: Any) -> List[str]:
+def _coerce_string_list(raw: Any) -> List[str]:
+    """Return a list of cleaned strings from list-like inputs."""
+
+    items: List[Any]
     if isinstance(raw, list):
-        return [str(item).strip() for item in raw if str(item).strip()]
-
-    if not isinstance(raw, str):
-        return []
-
-    stripped = raw.strip()
-    if not stripped:
-        return []
-
-    try:
-        parsed = json.loads(stripped)
-    except (json.JSONDecodeError, TypeError):
+        items = raw
+    elif isinstance(raw, str):
+        stripped = raw.strip()
+        if not stripped:
+            return []
+        parsed: Optional[Any] = None
         try:
-            parsed = ast.literal_eval(stripped)
-        except (ValueError, SyntaxError):
-            parsed = None
+            parsed = json.loads(stripped)
+        except (json.JSONDecodeError, TypeError):
+            try:
+                parsed = ast.literal_eval(stripped)
+            except (ValueError, SyntaxError):
+                parsed = None
+        if isinstance(parsed, list):
+            items = parsed
+        else:
+            matches = re.findall(r'"(.*?)"', stripped)
+            if matches:
+                items = matches
+            else:
+                items = [stripped]
+    else:
+        return []
 
-    if isinstance(parsed, list):
-        return [str(item).strip() for item in parsed if str(item).strip()]
+    cleaned: List[str] = []
+    for item in items:
+        text = str(item).strip()
+        if not text:
+            continue
+        if text.startswith('["') and text.endswith('"]') and len(text) >= 4:
+            text = text[2:-2].strip()
+        if text.startswith('"') and text.endswith('"') and len(text) >= 2:
+            text = text[1:-1].strip()
+        cleaned.append(text)
+    return cleaned
 
-    return [stripped] if stripped else []
+
+def split_bullets(raw: Any) -> List[str]:
+    return _coerce_string_list(raw)
 
 
-def count_images(raw: str) -> int:
-    if not isinstance(raw, str) or not raw.strip():
-        return 0
-    pieces = re.split(r"[\s,|]+", raw.strip())
-    urls = [p for p in pieces if p.lower().endswith((".jpg", ".jpeg", ".png", ".webp"))]
-    return len(urls)
+def extract_image_urls(raw: Any) -> List[str]:
+    """Return all non-empty image URLs from a list-like field."""
+
+    return [url for url in _coerce_string_list(raw) if str(url).strip()]
+
+
+def count_images(raw: Any) -> int:
+    """Count images by the number of URLs provided in the list-like field."""
+
+    return len(extract_image_urls(raw))
 
 
 def has_promo_terms(text: str) -> bool:
