@@ -7,7 +7,8 @@ import io
 import json
 import os
 import tempfile
-from typing import Any, Dict, List, Tuple, Union
+from dataclasses import dataclass
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 try:  # Optional dependency; handled gracefully if unavailable
     from langchain.document_loaders import PyPDFLoader  # type: ignore
@@ -21,8 +22,31 @@ try:  # Secondary fallback when langchain PDF loader is missing
 except Exception:  # pragma: no cover - optional dependency guard
     PdfReader = None  # type: ignore
 
+try:  # Streamlit is only available at runtime inside the app
+    import streamlit as st
+except Exception:  # pragma: no cover - optional dependency guard
+    st = None  # type: ignore
+
+try:  # Optional OpenAI dependency – same guard pattern as in app.py
+    from openai import OpenAI
+except Exception:  # pragma: no cover - optional dependency guard
+    OpenAI = None  # type: ignore
+
+from langchain_core.runnables import RunnableLambda
+
+from core.content_rules import DEFAULT_RULES
+
 # Avoid importing Streamlit; accept generic uploaded content types instead.
 UploadedContent = Union[bytes, "UploadedFileLike"]
+
+
+@dataclass
+class RuleExtraction:
+    """Structured payload returned after rule extraction."""
+
+    rules: Dict[str, Any]
+    messages: List[str]
+    source: str = "Built-in defaults"
 
 
 class UploadedFileLike:  # pragma: no cover - lightweight protocol substitute
@@ -250,4 +274,53 @@ def extract_rules_config(
     return merged, errors
 
 
-__all__ = ["extract_rules_config"]
+class _RuleExtractorRunnable:
+    """LangChain runnable wrapper that orchestrates rule extraction."""
+
+    def __init__(self, default_rules: Optional[Dict[str, Any]] = None):
+        self._default_rules = copy.deepcopy(default_rules or DEFAULT_RULES)
+
+    def __call__(self, inputs: Dict[str, Any]) -> RuleExtraction:  # type: ignore[override]
+        rules_file = inputs.get("rules_file") if isinstance(inputs, dict) else None
+        llm_client = self._get_llm_client()
+        rules, messages = extract_rules_config(rules_file, llm_client, self._default_rules)
+
+        # Determine the rules provenance for downstream display.
+        using_defaults = rules == self._default_rules
+        if rules_file is None:
+            source = "Built-in defaults"
+        elif using_defaults:
+            source = "Uploaded rules (fallback to defaults)"
+        else:
+            source = "Uploaded rules"
+
+        return RuleExtraction(rules=rules, messages=list(messages), source=source)
+
+    def _get_llm_client(self) -> Any:
+        """Best-effort construction of an OpenAI client, mirroring app logic."""
+
+        if OpenAI is None:
+            return None
+
+        api_key: Optional[str] = None
+        if st is not None:
+            api_key = st.session_state.get("OPENAI_API_KEY_UI") or os.getenv("OPENAI_API_KEY")
+        else:
+            api_key = os.getenv("OPENAI_API_KEY")
+
+        if not api_key:
+            return None
+
+        try:
+            return OpenAI(api_key=api_key)
+        except Exception:
+            return None
+
+
+def create_rule_extractor() -> RunnableLambda:
+    """Return a runnable that loads rules and returns a :class:`RuleExtraction`."""
+
+    return RunnableLambda(_RuleExtractorRunnable())
+
+
+__all__ = ["RuleExtraction", "extract_rules_config", "create_rule_extractor"]

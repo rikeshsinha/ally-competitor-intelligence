@@ -49,6 +49,7 @@ from core.content_rules import (
     split_bullets,
 )
 from graph.product_validation import build_product_validation_graph
+from chains.rule_extractor import RuleExtraction
 
 # Optional OpenAI SDK (gracefully handle if not installed or no key)
 try:
@@ -118,8 +119,8 @@ def validate_openai_key() -> Tuple[bool, str]:
 
 def get_validation_graph():
     if "product_validation_graph" not in st.session_state:
-        def _run_validation(sku_data, rule_data):
-            rules = getattr(rule_data, "rules", DEFAULT_RULES) or DEFAULT_RULES
+        def _run_validation(sku_data, rule_data: RuleExtraction):
+            rules = rule_data.rules or DEFAULT_RULES
             available_universes = getattr(sku_data, "available_universes", None)
             client = getattr(sku_data, "client", {})
             competitor = getattr(sku_data, "competitor", {})
@@ -295,9 +296,14 @@ if sku_data is None or rule_data is None:
     st.error("Failed to process the uploaded files. Please re-upload and try again.")
     st.stop()
 
-current_rules = getattr(rule_data, "rules", DEFAULT_RULES) or DEFAULT_RULES
-rules_source = getattr(rule_data, "source", "Built-in defaults")
-rules_notes = getattr(rule_data, "messages", [])
+if isinstance(rule_data, RuleExtraction):
+    current_rules = rule_data.rules or DEFAULT_RULES
+    rules_source = rule_data.source
+    rules_notes = rule_data.messages
+else:
+    current_rules = getattr(rule_data, "rules", DEFAULT_RULES) or DEFAULT_RULES
+    rules_source = getattr(rule_data, "source", "Built-in defaults")
+    rules_notes = getattr(rule_data, "messages", [])
 
 with st.sidebar.expander("Active rules JSON"):
     st.json(current_rules)
