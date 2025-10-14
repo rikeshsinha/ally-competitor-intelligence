@@ -3,9 +3,8 @@ from __future__ import annotations
 
 import ast
 import json
-from dataclasses import dataclass
 import re
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import pandas as pd
 
@@ -55,132 +54,6 @@ EXCEPTIONS_LOWERCASE_WORDS = {
     "with",
     "to",
     "of",
-}
-
-
-@dataclass
-class UniverseAnalysis:
-    client_provided: Optional[str]
-    competitor_provided: Optional[str]
-    inferred: Optional[str]
-    suggested: Optional[str]
-    reason: str
-    issues: List[str]
-    keyword_counts: Dict[str, int]
-
-
-UNIVERSE_KEYWORDS: Dict[str, List[str]] = {
-    "Beverages": [
-        "beverage",
-        "drink",
-        "juice",
-        "soda",
-        "cola",
-        "water",
-        "tea",
-        "coffee",
-        "sparkling",
-        "energy",
-        "soft drink",
-    ],
-    "Pantry Staples": [
-        "staple",
-        "rice",
-        "flour",
-        "atta",
-        "sugar",
-        "salt",
-        "lentil",
-        "dal",
-        "pasta",
-        "noodle",
-        "oil",
-        "ghee",
-        "spice",
-        "masala",
-    ],
-    "Breakfast Cereals": [
-        "cereal",
-        "cornflakes",
-        "corn flakes",
-        "oats",
-        "oatmeal",
-        "granola",
-        "muesli",
-        "bran",
-        "wheat flakes",
-    ],
-    "Snacks": [
-        "snack",
-        "chips",
-        "crisps",
-        "namkeen",
-        "nuts",
-        "trail mix",
-        "popcorn",
-        "biscuits",
-        "cookies",
-        "pretzel",
-    ],
-    "Canned & Packaged Foods": [
-        "canned",
-        "can",
-        "tin",
-        "packaged",
-        "soup",
-        "beans",
-        "tomato",
-        "corn",
-        "tuna",
-    ],
-    "Condiments & Sauces": [
-        "ketchup",
-        "mayonnaise",
-        "mayo",
-        "mustard",
-        "sauce",
-        "hot sauce",
-        "soy",
-        "salsa",
-        "dressing",
-        "vinegar",
-    ],
-    "Baking Supplies": [
-        "baking",
-        "bake",
-        "bicarbonate",
-        "baking soda",
-        "yeast",
-        "cocoa",
-        "chocolate chips",
-        "vanilla",
-        "baking powder",
-    ],
-    "Oils & Vinegars": [
-        "oil",
-        "olive",
-        "sunflower",
-        "canola",
-        "mustard oil",
-        "sesame",
-        "vinegar",
-        "apple cider",
-    ],
-    "Tea & Coffee": [
-        "tea",
-        "chai",
-        "green tea",
-        "black tea",
-        "coffee",
-        "espresso",
-        "instant coffee",
-        "grounds",
-        "beans",
-    ],
-    "Juices": ["juice", "mango", "orange", "apple", "cranberry", "pulp", "nectar"],
-    "Water": ["water", "mineral", "spring", "purified", "sparkling"],
-    "Dairy": ["milk", "cream", "butter", "ghee", "cheese", "yogurt", "curd"],
-    "Baby Food": ["baby", "infant", "toddler", "puree", "cerelac", "formula"],
 }
 
 
@@ -319,96 +192,11 @@ def rule_check_description(desc: str, rules: Dict[str, Any]) -> Tuple[int, List[
     return max(score, 0), issues
 
 
-def infer_universe_from_text(
-    title: str,
-    bullets: List[str],
-    desc: str,
-    category: str = "",
-    allowed: Optional[Iterable[str]] = None,
-) -> Tuple[Optional[str], Dict[str, int]]:
-    text = " ".join([
-        str(title or ""),
-        " ".join([b for b in bullets or [] if isinstance(b, str)]),
-        str(desc or ""),
-        str(category or ""),
-    ]).lower()
-    vocab: Dict[str, List[str]] = dict(UNIVERSE_KEYWORDS)
-    if allowed:
-        allowed_set = {a.strip().title() for a in allowed if isinstance(a, str)}
-        vocab = {u: kws for u, kws in vocab.items() if u in allowed_set}
-        for lab in allowed_set:
-            if lab not in vocab:
-                toks = [t for t in re.split(r"[^a-zA-Z0-9]+", lab.lower()) if t]
-                vocab[lab] = toks or [lab.lower()]
-    counts: Dict[str, int] = {u: 0 for u in vocab}
-    for uni, kws in vocab.items():
-        for kw in kws + [uni.lower()]:
-            if kw and kw in text:
-                counts[uni] += text.count(kw)
-    best = max(counts, key=lambda k: counts[k]) if counts else None
-    if best and counts[best] > 0:
-        return best, counts
-    return None, counts
-
-
-def analyze_universe(
-    client: Dict[str, Any],
-    comp: Dict[str, Any],
-    available_universes: Optional[Iterable[str]] = None,
-) -> UniverseAnalysis:
-    client_bullets = split_bullets(client.get("bullets", ""))
-    inferred, counts = infer_universe_from_text(
-        client.get("title", ""),
-        client_bullets,
-        client.get("description", ""),
-        client.get("category", ""),
-        allowed=available_universes,
-    )
-    client_prov = (client.get("universe") or "").strip() or None
-    comp_prov = (comp.get("universe") or "").strip() or None
-
-    issues: List[str] = []
-    suggested: Optional[str] = None
-    reason = ""
-
-    if inferred and (not client_prov or client_prov.lower() != inferred.lower()):
-        suggested = inferred
-        reason = f"Inferred '{inferred}' from keywords in title/bullets/description"
-        issues.append(
-            f"Client universe '{client_prov or '—'}' may be incorrect; inferred '{inferred}'"
-        )
-    elif not client_prov and comp_prov:
-        suggested = comp_prov
-        reason = "Client universe missing; align with competitor if same category"
-        issues.append("Client universe missing; suggest aligning with competitor")
-    elif (
-        comp_prov
-        and client_prov
-        and client_prov.lower() != comp_prov.lower()
-        and inferred
-        and inferred.lower() == comp_prov.lower()
-    ):
-        suggested = inferred
-        reason = "Competitor universe matches inferred signals"
-        issues.append("Client universe differs from competitor and inferred signals")
-
-    return UniverseAnalysis(
-        client_provided=client_prov,
-        competitor_provided=comp_prov,
-        inferred=inferred,
-        suggested=suggested,
-        reason=reason,
-        issues=issues,
-        keyword_counts=counts,
-    )
-
-
 def compare_fields(
     client: Dict[str, Any],
     comp: Dict[str, Any],
     *,
     rules: Optional[Dict[str, Dict[str, Any]]] = None,
-    available_universes: Optional[Iterable[str]] = None,
 ) -> Dict[str, Any]:
     rules = rules or DEFAULT_RULES
     client_bullets = split_bullets(client.get("bullets", ""))
@@ -426,8 +214,6 @@ def compare_fields(
     desc_score, desc_issues = rule_check_description(
         client.get("description", ""), rules.get("description", {})
     )
-
-    uni = analyze_universe(client, comp, available_universes=available_universes)
 
     summary = {
         "title": {
@@ -455,15 +241,6 @@ def compare_fields(
             if client_images >= rules.get("images", {}).get("min_count", 0)
             else ["Add at least one image"],
         },
-        "universe": {
-            "client_provided": uni.client_provided,
-            "competitor_provided": uni.competitor_provided,
-            "inferred": uni.inferred,
-            "suggested": uni.suggested,
-            "reason": uni.reason,
-            "issues": uni.issues,
-            "keyword_counts": uni.keyword_counts,
-        },
     }
 
     gaps = []
@@ -475,11 +252,6 @@ def compare_fields(
         gaps.append("Add a concise use-case/benefit sentence in the description (<= 200 chars)")
     if summary["images"]["client_count"] < summary["images"]["comp_count"]:
         gaps.append("Upload additional images to match competitor coverage (white background, high-res)")
-    if summary["universe"].get("suggested"):
-        gaps.append(
-            f"Universe: suggest '{summary['universe']['suggested']}' (reason: {summary['universe']['reason']})"
-        )
-
     summary["gaps_vs_competitor"] = gaps
     return summary
 

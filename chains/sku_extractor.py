@@ -17,7 +17,6 @@ class SKUData:
     column_map: Dict[str, str]
     client: Dict[str, Any]
     competitor: Dict[str, Any]
-    available_universes: List[str]
 
 
 class _SKUExtractor:
@@ -30,8 +29,7 @@ class _SKUExtractor:
             st.stop()
         df = self._load_dataframe(csv_file)
         column_map = self._resolve_columns(df)
-        available_universes = self._available_universes(df, column_map["universe_col"])
-        self._show_mapping(column_map, available_universes)
+        self._show_mapping(column_map)
 
         sku_list, display_to_index = self._build_sku_list(df, column_map["sku_col"])
         if not sku_list:
@@ -63,7 +61,6 @@ class _SKUExtractor:
             column_map=column_map,
             client=client_data,
             competitor=comp_data,
-            available_universes=available_universes,
         )
 
     def _load_dataframe(self, csv_file) -> pd.DataFrame:
@@ -96,18 +93,9 @@ class _SKUExtractor:
             "universe_col": pick("universe"),
         }
 
-    def _available_universes(self, df: pd.DataFrame, universe_col: str) -> List[str]:
-        if universe_col not in df.columns:
-            return []
-        raw_unis = df[universe_col].astype(str).fillna("").str.strip()
-        universes = sorted({u.title() for u in raw_unis if u and u.lower() != "nan"})
-        return universes
-
-    def _show_mapping(self, column_map: Dict[str, str], universes: List[str]) -> None:
+    def _show_mapping(self, column_map: Dict[str, str]) -> None:
         with st.expander("Detected column mapping"):
-            mapping = dict(column_map)
-            mapping["available_universes"] = universes[:20]
-            st.write(mapping)
+            st.write(dict(column_map))
 
     def _build_sku_list(
         self, df: pd.DataFrame, sku_col: str

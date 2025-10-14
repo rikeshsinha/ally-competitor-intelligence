@@ -121,15 +121,9 @@ def get_validation_graph():
     if "product_validation_graph" not in st.session_state:
         def _run_validation(sku_data, rule_data: RuleExtraction):
             rules = rule_data.rules or DEFAULT_RULES
-            available_universes = getattr(sku_data, "available_universes", None)
             client = getattr(sku_data, "client", {})
             competitor = getattr(sku_data, "competitor", {})
-            return compare_fields(
-                client,
-                competitor,
-                rules=rules,
-                available_universes=available_universes,
-            )
+            return compare_fields(client, competitor, rules=rules)
 
         st.session_state["product_validation_graph"] = build_product_validation_graph(
             _run_validation
@@ -406,7 +400,7 @@ if formatted_rules_notes:
     st.caption(f"Rules source: {rules_source} — {formatted_rules_notes}")
 else:
     st.caption(f"Rules source: {rules_source}")
-col1, col2, col3, col4, col5 = st.columns(5)
+col1, col2, col3, col4 = st.columns(4)
 with col1:
     st.metric(
         "Title score",
@@ -427,13 +421,6 @@ with col3:
     )
 with col4:
     st.metric("Images (client vs comp)", f"{summary['images']['client_count']} vs {summary['images']['comp_count']}")
-with col5:
-    _u = summary.get('universe', {})
-    _client_uni = _u.get('client_provided') or '—'
-    _suggested_uni = _u.get('suggested') or _client_uni
-    _comp_uni = _u.get('competitor_provided') or '—'
-    _inferred_uni = _u.get('inferred') or '—'
-    st.metric("Universe", f"{_client_uni} → {_suggested_uni}", help=f"Competitor: {_comp_uni}; Inferred: {_inferred_uni}")
 
 with st.expander("Issues & Gaps"):
     if summary["title"]["issues"]:
@@ -456,10 +443,6 @@ with st.expander("Issues & Gaps"):
         st.markdown("**Gaps vs competitor**")
         for g in summary["gaps_vs_competitor"]:
             st.write("- ", g)
-    if summary.get("universe", {}).get("issues"):
-        st.markdown("**Universe**")
-        for i in summary["universe"]["issues"]:
-            st.write("- ", i)
 
 st.divider()
 
@@ -515,16 +498,6 @@ if "llm_out" in st.session_state:
             final_md.append(f"- {re.sub(r'[.!?]+$','', b).strip()}")
         final_md.append("\n\n## Description (proposed)\n")
         final_md.append((out.get("description_edit", ""))[: desc_max])
-
-        uni = summary.get("universe", {})
-        if uni.get("suggested"):
-            final_md.append("\n\n## Universe suggestion\n")
-            final_md.append(
-                f"Suggested universe: **{uni['suggested']}** "
-                f"(client: {uni.get('client_provided') or '—'}, "
-                f"competitor: {uni.get('competitor_provided') or '—'})\n"
-                f"Reason: {uni.get('reason','')}"
-            )
 
         final_md.append("\n\n## Rationale & Rule Compliance\n")
         final_md.append(
