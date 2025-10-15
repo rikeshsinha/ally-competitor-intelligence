@@ -155,28 +155,64 @@ def call_llm(
 
     if client is None:
         # Heuristic fallback: create simple suggestions without LLM
-        bullets = split_bullets(client_data.get("bullets", ""))
+        def _normalize_clause(text: str) -> str:
+            text = re.sub(r"\s+", " ", text.strip())
+            text = re.sub(r"[.!?;,:]+$", "", text)
+            return text.strip()
+
+        bullet_input = client_data.get("bullets", "")
+        split_candidates = split_bullets(bullet_input)
+        original_bullets: List[str] = []
+        for entry in split_candidates:
+            if isinstance(entry, str) and re.search(r"[\n\r\|•;]+", entry):
+                original_bullets.extend(
+                    [seg for seg in re.split(r"[\n\r\|•;]+", entry) if seg.strip()]
+                )
+            else:
+                text = str(entry).strip()
+                if text:
+                    original_bullets.append(text)
+        if not original_bullets and isinstance(bullet_input, str):
+            original_bullets = [
+                seg for seg in re.split(r"[\n\r\|•;]+", bullet_input) if seg.strip()
+            ]
+        normalized_bullets = []
+        for bullet in original_bullets:
+            normalized = _normalize_clause(bullet)
+            if normalized:
+                normalized_bullets.append(normalized)
+
+        max_bullets = rules["bullets"].get("max_count", 5)
+        if len(normalized_bullets) < max_bullets:
+            description_text = client_data.get("description") or ""
+            # Split description into clauses/sentences using punctuation/newlines
+            clauses = re.split(r"[\n\r;]+|(?<=[.!?])\s+", description_text)
+            for clause in clauses:
+                normalized_clause = _normalize_clause(clause)
+                if (
+                    normalized_clause
+                    and normalized_clause not in normalized_bullets
+                ):
+                    normalized_bullets.append(normalized_clause)
+                if len(normalized_bullets) >= max_bullets:
+                    break
+
+        fixed_bullets: List[str] = normalized_bullets[:max_bullets]
+
         base_brand = (client_data.get("brand") or "").strip()
-        # Title heuristic: ensure brand at start, trim to 50 chars
+        # Title heuristic: ensure brand at start, trim to rule max characters
         raw_title = client_data.get("title") or ""
         if base_brand and base_brand.lower() not in raw_title.lower():
             title = f"{base_brand} " + raw_title
         else:
             title = raw_title
         title = enforce_title_caps(title)[: rules["title"]["max_chars"]].strip()
-        # Bullets heuristic: take up to 5, strip punctuation at end, capitalize first letter
-        fixed_bullets: List[str] = []
-        for b in bullets[:5] or ["Durable construction", "Comfortable fit", "Easy to clean"]:
-            b = b.strip()
-            b = re.sub(r"[.!?]+$", "", b)
-            if b and b[0].isalpha():
-                b = b[0].upper() + b[1:]
-            fixed_bullets.append(b)
-        # Description heuristic
+
+        # Description heuristic: keep client description if present, otherwise reuse bullet text
         desc = (client_data.get("description") or "").strip()
-        if not desc:
-            desc = "Compact design for everyday use; easy to clean; ideal for most pets"
-        desc = desc[: rules["description"]["max_chars"]]
+        if not desc and fixed_bullets:
+            desc = " ".join(fixed_bullets)
+        desc = re.sub(r"\s+", " ", desc)[: rules["description"]["max_chars"]].strip()
         return {
             "title_edit": title,
             "bullets_edits": fixed_bullets,
