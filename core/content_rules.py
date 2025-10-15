@@ -108,7 +108,7 @@ def _extract_urls_from_text(text: str) -> List[str]:
     return [
         p
         for p in pieces
-        if p and p.lower().endswith((".jpg", ".jpeg", ".png", ".webp"))
+        if p and p.lower().endswith((".jpg", ".jpeg", ".png", ".webp",".res"))
     ]
 
 
