@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 import pandas as pd
 import streamlit as st
@@ -15,44 +15,53 @@ from core.content_rules import dataframe_from_uploaded_file
 class SKUData:
     dataframe: pd.DataFrame
     column_map: Dict[str, str]
+    brands: List[str]
+    brand_map: Dict[str, List[tuple[str, int]]]
+    client_selection: "SKUSelection"
+    competitor_selection: "SKUSelection"
     client: Dict[str, Any]
     competitor: Dict[str, Any]
+
+
+@dataclass
+class SKUSelection:
+    brand: str
+    title_index: int
+    row_index: int
 
 
 class _SKUExtractor:
     def __call__(self, inputs: Dict[str, Any]) -> SKUData:  # type: ignore[override]
         csv_file = inputs.get("sku_file")
-        if csv_file is None and "uploaded_df" not in st.session_state:
-            st.info(
-                "Upload a CSV to continue. Expected columns: sku_id/product_id, title, bullets, description, image_urls, brand, category."
-            )
-            st.stop()
         df = self._load_dataframe(csv_file)
         column_map = self._resolve_columns(df)
         df = self._deduplicate_products(df, column_map)
-        self._show_mapping(column_map)
+        brands, brand_map = self._build_sku_list(df, column_map)
+        if not brands:
+            raise ValueError("No SKU identifiers found in the uploaded file.")
 
-        sku_list, display_to_index = self._build_sku_list(df, column_map["sku_col"])
-        if not sku_list:
-            st.warning("No SKU identifiers found in the uploaded file.")
-            st.stop()
-
-        selected_client = st.sidebar.selectbox("Select Client SKU", sku_list)
-        selected_comp = st.sidebar.selectbox(
-            "Select Competitor SKU",
-            sku_list,
-            index=min(1, len(sku_list) - 1),
+        client_selection = self._resolve_selection(
+            brands,
+            brand_map,
+            inputs.get("client_selection"),
+            default_brand_index=0,
+            default_title_index=0,
+        )
+        competitor_selection = self._resolve_selection(
+            brands,
+            brand_map,
+            inputs.get("competitor_selection"),
+            default_brand_index=min(1, len(brands) - 1),
+            default_title_index=1,
         )
 
-        client_idx = display_to_index.get(selected_client, 0)
-        comp_idx = display_to_index.get(selected_comp, min(1, len(sku_list) - 1))
-
-        client_row = df.iloc[[client_idx]] if len(df) else df.iloc[[]]
-        comp_row = df.iloc[[comp_idx]] if len(df) else df.iloc[[]]
+        client_row = df.iloc[[client_selection.row_index]] if len(df) else df.iloc[[]]
+        comp_row = (
+            df.iloc[[competitor_selection.row_index]] if len(df) else df.iloc[[]]
+        )
 
         if client_row.empty or comp_row.empty:
-            st.warning("Please select valid SKUs")
-            st.stop()
+            raise ValueError("Unable to resolve selected SKUs from the uploaded file.")
 
         client_data = self._record_from_row(client_row, column_map)
         comp_data = self._record_from_row(comp_row, column_map)
@@ -60,6 +69,10 @@ class _SKUExtractor:
         return SKUData(
             dataframe=df,
             column_map=column_map,
+            brands=brands,
+            brand_map=brand_map,
+            client_selection=client_selection,
+            competitor_selection=competitor_selection,
             client=client_data,
             competitor=comp_data,
         )
@@ -93,10 +106,6 @@ class _SKUExtractor:
             "category_col": pick("category", "node", "retailer_category_node"),
             "universe_col": pick("universe"),
         }
-
-    def _show_mapping(self, column_map: Dict[str, str]) -> None:
-        with st.expander("Detected column mapping"):
-            st.write(dict(column_map))
 
     def _deduplicate_products(
         self, df: pd.DataFrame, column_map: Dict[str, str]
@@ -153,8 +162,9 @@ class _SKUExtractor:
         return deduped
 
     def _build_sku_list(
-        self, df: pd.DataFrame, sku_col: str
-    ) -> tuple[List[str], Dict[str, int]]:
+        self, df: pd.DataFrame, column_map: Dict[str, str]
+    ) -> tuple[List[str], Dict[str, List[tuple[str, int]]]]:
+        sku_col = column_map["sku_col"]
         raw_series = df[sku_col].fillna("")
         sku_series = raw_series.astype(str).str.strip()
         sku_series = sku_series.replace({"nan": "", "NaN": "", "None": ""})
@@ -168,8 +178,70 @@ class _SKUExtractor:
             duplicate_counts[base] = count + 1
             display_skus.append(display)
         df["_display_sku"] = display_skus
-        display_to_index = {label: pos for pos, label in enumerate(display_skus)}
-        return display_skus, display_to_index
+        brand_col = column_map["brand_col"]
+        title_col = column_map["title_col"]
+
+        brand_map: Dict[str, List[tuple[str, int]]] = {}
+        brands: List[str] = []
+        for idx, row in df.iterrows():
+            brand_value = row[brand_col]
+            brand_label = "" if pd.isna(brand_value) else str(brand_value).strip()
+            if not brand_label:
+                brand_label = "(Unspecified Brand)"
+            if brand_label not in brand_map:
+                brand_map[brand_label] = []
+                brands.append(brand_label)
+
+            title_value = row[title_col]
+            title_label = "" if pd.isna(title_value) else str(title_value).strip()
+            if not title_label:
+                title_label = df.at[idx, "_display_sku"]
+            brand_map[brand_label].append((title_label, idx))
+
+        return brands, brand_map
+
+    def _resolve_selection(
+        self,
+        brands: List[str],
+        brand_map: Dict[str, List[tuple[str, int]]],
+        selection: Optional[Dict[str, Any]],
+        *,
+        default_brand_index: int,
+        default_title_index: int,
+    ) -> SKUSelection:
+        if not brands:
+            raise ValueError("No brands available to resolve selection.")
+
+        resolved_brand = ""
+        if selection:
+            candidate_brand = selection.get("brand")
+            if isinstance(candidate_brand, str) and candidate_brand in brand_map:
+                resolved_brand = candidate_brand
+        if not resolved_brand:
+            resolved_brand = brands[min(max(default_brand_index, 0), len(brands) - 1)]
+
+        options = brand_map.get(resolved_brand, [])
+        if not options:
+            raise ValueError(
+                f"No titles available for brand '{resolved_brand}' in the uploaded file."
+            )
+
+        resolved_title_index: int
+        if selection and isinstance(selection.get("title_index"), int):
+            candidate_index = selection.get("title_index")
+            if isinstance(candidate_index, int) and 0 <= candidate_index < len(options):
+                resolved_title_index = candidate_index
+            else:
+                resolved_title_index = min(max(default_title_index, 0), len(options) - 1)
+        else:
+            resolved_title_index = min(max(default_title_index, 0), len(options) - 1)
+
+        row_index = options[resolved_title_index][1]
+        return SKUSelection(
+            brand=resolved_brand,
+            title_index=resolved_title_index,
+            row_index=row_index,
+        )
 
     def _record_from_row(self, row: pd.DataFrame, column_map: Dict[str, str]) -> Dict[str, Any]:
         sku_display = row.iloc[0]["_display_sku"] if "_display_sku" in row.columns else ""
