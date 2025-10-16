@@ -135,89 +135,6 @@ def get_validation_graph():
     return st.session_state["product_validation_graph"]
 
 
-def _format_title_labels(options: List[Tuple[str, int]]) -> List[str]:
-    counts: Dict[str, int] = {}
-    labels: List[str] = []
-    for title, _ in options:
-        count = counts.get(title, 0)
-        label = title if count == 0 else f"{title} ({count + 1})"
-        counts[title] = count + 1
-        labels.append(label)
-    return labels
-
-
-def _render_sku_selectors(sku_data) -> Tuple[Dict[str, Any], Dict[str, Any]]:
-    brands = getattr(sku_data, "brands", [])
-    if not brands:
-        st.sidebar.warning("No SKU identifiers found in the uploaded file.")
-        st.stop()
-
-    st.sidebar.subheader("Client & Competitor Selection")
-    st.sidebar.caption(
-        "Choose a brand first, then pick the matching product title for each side."
-    )
-
-    client_selection = getattr(sku_data, "client_selection", None)
-    client_brand_index = 0
-    if client_selection and client_selection.brand in brands:
-        client_brand_index = brands.index(client_selection.brand)
-
-    selected_client_brand = st.sidebar.selectbox(
-        "Select Client Brand", brands, index=client_brand_index
-    )
-
-    client_entries = sku_data.brand_map.get(selected_client_brand, [])
-    if not client_entries:
-        st.sidebar.warning(f"No titles found for brand '{selected_client_brand}'.")
-        st.stop()
-    client_labels = _format_title_labels(client_entries)
-    if client_selection and selected_client_brand == client_selection.brand:
-        default_client_title_index = min(
-            client_selection.title_index, len(client_labels) - 1
-        )
-    else:
-        default_client_title_index = 0
-    selected_client_title = st.sidebar.selectbox(
-        "Select Client Title",
-        client_labels,
-        index=default_client_title_index,
-    )
-    client_title_index = client_labels.index(selected_client_title)
-
-    competitor_selection = getattr(sku_data, "competitor_selection", None)
-    competitor_default_brand_index = min(1, len(brands) - 1)
-    competitor_brand_index = competitor_default_brand_index
-    if competitor_selection and competitor_selection.brand in brands:
-        competitor_brand_index = brands.index(competitor_selection.brand)
-
-    selected_comp_brand = st.sidebar.selectbox(
-        "Select Competitor Brand", brands, index=competitor_brand_index
-    )
-
-    comp_entries = sku_data.brand_map.get(selected_comp_brand, [])
-    if not comp_entries:
-        st.sidebar.warning(f"No titles found for brand '{selected_comp_brand}'.")
-        st.stop()
-    comp_labels = _format_title_labels(comp_entries)
-    if competitor_selection and selected_comp_brand == competitor_selection.brand:
-        default_comp_title_index = min(
-            competitor_selection.title_index, len(comp_labels) - 1
-        )
-    else:
-        default_comp_title_index = min(1, len(comp_labels) - 1)
-    selected_comp_title = st.sidebar.selectbox(
-        "Select Competitor Title",
-        comp_labels,
-        index=default_comp_title_index,
-    )
-    comp_title_index = comp_labels.index(selected_comp_title)
-
-    return (
-        {"brand": selected_client_brand, "title_index": client_title_index},
-        {"brand": selected_comp_brand, "title_index": comp_title_index},
-    )
-
-
 def call_llm(
     client_data: Dict[str, Any],
     comp_data: Dict[str, Any],
@@ -426,29 +343,7 @@ if csv_file is None and "uploaded_df" not in st.session_state:
     st.stop()
 
 validation_graph = get_validation_graph()
-
-
-def _invoke_validation_graph(
-    client_sel: Optional[Dict[str, Any]], comp_sel: Optional[Dict[str, Any]]
-):
-    payload = {
-        "rules_file": rules_file,
-        "sku_file": csv_file,
-        "client_selection": client_sel,
-        "competitor_selection": comp_sel,
-    }
-    return validation_graph.invoke(payload)
-
-
-client_selection_state = st.session_state.get("sku_client_selection")
-competitor_selection_state = st.session_state.get("sku_comp_selection")
-
-try:
-    result = _invoke_validation_graph(client_selection_state, competitor_selection_state)
-except ValueError as exc:
-    st.warning(str(exc))
-    st.stop()
-
+result = validation_graph.invoke({"rules_file": rules_file, "sku_file": csv_file})
 sku_data = result.get("sku_data")
 rule_data = result.get("rule_data")
 summary = result.get("validation", {})
@@ -456,43 +351,6 @@ summary = result.get("validation", {})
 if sku_data is None or rule_data is None:
     st.error("Failed to process the uploaded files. Please re-upload and try again.")
     st.stop()
-
-client_selection_input, competitor_selection_input = _render_sku_selectors(sku_data)
-
-selection_changed = (
-    client_selection_input["brand"] != sku_data.client_selection.brand
-    or client_selection_input["title_index"]
-    != sku_data.client_selection.title_index
-    or competitor_selection_input["brand"]
-    != sku_data.competitor_selection.brand
-    or competitor_selection_input["title_index"]
-    != sku_data.competitor_selection.title_index
-)
-
-if selection_changed:
-    try:
-        result = _invoke_validation_graph(
-            client_selection_input, competitor_selection_input
-        )
-    except ValueError as exc:
-        st.warning(str(exc))
-        st.stop()
-    sku_data = result.get("sku_data")
-    rule_data = result.get("rule_data")
-    summary = result.get("validation", {})
-
-if sku_data is None or rule_data is None:
-    st.error("Failed to process the uploaded files. Please re-upload and try again.")
-    st.stop()
-
-st.session_state["sku_client_selection"] = {
-    "brand": sku_data.client_selection.brand,
-    "title_index": sku_data.client_selection.title_index,
-}
-st.session_state["sku_comp_selection"] = {
-    "brand": sku_data.competitor_selection.brand,
-    "title_index": sku_data.competitor_selection.title_index,
-}
 
 if isinstance(rule_data, RuleExtraction):
     current_rules = rule_data.rules or DEFAULT_RULES

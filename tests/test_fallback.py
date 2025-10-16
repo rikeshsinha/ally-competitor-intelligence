@@ -43,29 +43,8 @@ class _DummyGraph:
             },
             "images": {},
         }
-        dummy_sku = types.SimpleNamespace(
-            dataframe=None,
-            column_map={},
-            brands=["Acme", "Rival"],
-            brand_map={
-                "Acme": [("Client Product", 0)],
-                "Rival": [("Competitor Product", 1)],
-            },
-            client_selection=types.SimpleNamespace(
-                brand="Acme", title_index=0, row_index=0
-            ),
-            competitor_selection=types.SimpleNamespace(
-                brand="Rival", title_index=0, row_index=1
-            ),
-            client={"sku": "CLIENT-1", "brand": "Acme", "title": "Client Product"},
-            competitor={
-                "sku": "RIVAL-1",
-                "brand": "Rival",
-                "title": "Competitor Product",
-            },
-        )
         return {
-            "sku_data": dummy_sku,
+            "sku_data": types.SimpleNamespace(client={}, competitor={}),
             "rule_data": types.SimpleNamespace(rules=rules, source="tests", messages=[]),
             "validation": {
                 "title": {"client_score": 0, "issues": []},
