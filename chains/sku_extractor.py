@@ -29,6 +29,7 @@ class _SKUExtractor:
             st.stop()
         df = self._load_dataframe(csv_file)
         column_map = self._resolve_columns(df)
+        df = self._deduplicate_products(df, column_map)
         self._show_mapping(column_map)
 
         sku_list, display_to_index = self._build_sku_list(df, column_map["sku_col"])
@@ -96,6 +97,60 @@ class _SKUExtractor:
     def _show_mapping(self, column_map: Dict[str, str]) -> None:
         with st.expander("Detected column mapping"):
             st.write(dict(column_map))
+
+    def _deduplicate_products(
+        self, df: pd.DataFrame, column_map: Dict[str, str]
+    ) -> pd.DataFrame:
+        if df.empty:
+            return df
+
+        sku_col = column_map["sku_col"]
+        desc_col = column_map["desc_col"]
+        bullets_col = column_map["bullets_col"]
+        images_col = column_map["images_col"]
+
+        working_df = df.copy()
+
+        working_df["_desc_len"] = (
+            working_df[desc_col].fillna("").astype(str).str.len()
+        )
+        working_df["_bullet_len"] = (
+            working_df[bullets_col].fillna("").astype(str).str.len()
+        )
+
+        def _count_images(value: Any) -> int:
+            if isinstance(value, list):
+                iterable = value
+            else:
+                if pd.isna(value):
+                    return 0
+                value_str = str(value).strip()
+                if not value_str:
+                    return 0
+                for sep in ("\n", "|", ";", ","):
+                    if sep in value_str:
+                        parts = [part.strip() for part in value_str.split(sep)]
+                        return sum(1 for part in parts if part)
+                return 1
+            return sum(1 for item in iterable if pd.notna(item) and str(item).strip())
+
+        working_df["_image_count"] = working_df[images_col].apply(_count_images)
+        working_df["_original_order"] = range(len(working_df))
+
+        sorted_df = working_df.sort_values(
+            by=[sku_col, "_desc_len", "_bullet_len", "_image_count", "_original_order"],
+            ascending=[True, False, False, False, True],
+            kind="mergesort",
+        )
+
+        deduped = (
+            sorted_df.groupby(sku_col, sort=False, group_keys=False).head(1).copy()
+        )
+        deduped = deduped.sort_values("_original_order", kind="mergesort").drop(
+            columns=["_desc_len", "_bullet_len", "_image_count", "_original_order"]
+        )
+        deduped.reset_index(drop=True, inplace=True)
+        return deduped
 
     def _build_sku_list(
         self, df: pd.DataFrame, sku_col: str
