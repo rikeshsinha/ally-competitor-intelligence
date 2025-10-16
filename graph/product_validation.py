@@ -24,13 +24,7 @@ def build_product_validation_graph(
     rule_chain = create_rule_extractor()
 
     def run_sku(state: ProductValidationState) -> Dict[str, Any]:
-        result = sku_chain.invoke(
-            {
-                "sku_file": state.get("sku_file"),
-                "client_selection": state.get("client_selection"),
-                "competitor_selection": state.get("competitor_selection"),
-            }
-        )
+        result = sku_chain.invoke({"sku_file": state.get("sku_file")})
         return {"sku_data": result}
 
     def run_rules(state: ProductValidationState) -> Dict[str, Any]:
