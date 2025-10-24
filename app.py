@@ -34,7 +34,6 @@ Notes
 """
 
 from __future__ import annotations
-import math
 import os
 import re
 import json
@@ -396,60 +395,11 @@ def _display_rule_messages(messages: Any) -> bool:
     return displayed
 
 
-def _format_avg_rank(value: Any) -> str:
-    if value is None:
-        return "—"
-    try:
-        numeric = float(value)
-    except (TypeError, ValueError):
-        text = str(value).strip()
-        return text or "—"
-    if math.isnan(numeric) or math.isinf(numeric):
-        return "—"
-    if abs(numeric - round(numeric)) < 1e-6:
-        return str(int(round(numeric)))
-    formatted = f"{numeric:.2f}".rstrip("0").rstrip(".")
-    return formatted or f"{numeric:.2f}"
-
-
-def _to_display_text(value: Any) -> str:
-    if value is None:
-        return ""
-    if isinstance(value, float):
-        if math.isnan(value):
-            return ""
-        return str(value).strip()
-    text = str(value).strip()
-    lowered = text.lower()
-    if lowered in {"", "nan", "na", "none", "null"}:
-        return ""
-    return text
-
-
 if not _display_rule_messages(rules_notes):
     st.sidebar.info(f"Using rules from {rules_source}")
 
 client_data = getattr(sku_data, "client", {})
 comp_data = getattr(sku_data, "competitor", {})
-similar_candidates = getattr(sku_data, "similar_candidates", [])
-selection_metadata = getattr(sku_data, "selection_metadata", {})
-
-if similar_candidates:
-    with st.sidebar.expander("Similar competitor suggestions"):
-        for idx, candidate in enumerate(similar_candidates, 1):
-            label = candidate.get("title") or candidate.get("sku") or f"Candidate {idx}"
-            brand = candidate.get("brand") or "Unknown"
-            rank_text = _format_avg_rank(candidate.get("avg_rank_search"))
-            st.write(f"{idx}. {label} — {brand} (avg rank: {rank_text})")
-            reason = candidate.get("reason")
-            if reason:
-                st.caption(reason)
-
-selection_source = selection_metadata.get("source") if isinstance(selection_metadata, dict) else None
-if selection_source == "recommended":
-    st.sidebar.success("Competitor selection: Recommended similar match")
-elif selection_source == "manual" and similar_candidates:
-    st.sidebar.caption("Competitor selection: Manual choice")
 
 # Two-column layout for side-by-side comparison
 left, right = st.columns(2)
@@ -461,12 +411,6 @@ with left:
         client_sku_display = f"{client_sku_display} (original: {client_sku_original})"
     st.write(f"**SKU**: {client_sku_display or '—'}")
     st.write(f"**Brand**: {client_data.get('brand','')}")
-    st.write(
-        f"**Avg Search Rank**: {_format_avg_rank(client_data.get('avg_rank_search'))}"
-    )
-    client_bundle = _to_display_text(client_data.get("bundle_size"))
-    if client_bundle:
-        st.write(f"**Bundle Size**: {client_bundle}")
     st.write(f"**Universe**: {client_data.get('universe', '') or '—'}")
     st.write(f"**Title**: {client_data.get('title','')}")
     st.write("**Bullets**:")
@@ -492,20 +436,8 @@ with right:
         comp_sku_display = f"{comp_sku_display} (original: {comp_sku_original})"
     st.write(f"**SKU**: {comp_sku_display or '—'}")
     st.write(f"**Brand**: {comp_data.get('brand','')}")
-    st.write(
-        f"**Avg Search Rank**: {_format_avg_rank(comp_data.get('avg_rank_search'))}"
-    )
-    comp_bundle = _to_display_text(comp_data.get("bundle_size"))
-    if comp_bundle:
-        st.write(f"**Bundle Size**: {comp_bundle}")
     st.write(f"**Universe**: {comp_data.get('universe', '') or '—'}")
     st.write(f"**Title**: {comp_data.get('title','')}")
-    if comp_data.get("selection_source") == "recommended":
-        reason = _to_display_text(comp_data.get("similarity_reason"))
-        caption_text = "Recommended competitor selection"
-        if reason:
-            caption_text = f"{caption_text}: {reason}"
-        st.caption(caption_text)
     st.write("**Bullets**:")
     for b in split_bullets(comp_data.get("bullets", "")):
         st.write(f"• {b}")
