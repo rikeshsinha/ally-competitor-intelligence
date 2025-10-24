@@ -129,6 +129,7 @@ class _SKUExtractor:
         desc_col = column_map["desc_col"]
         bullets_col = column_map["bullets_col"]
         images_col = column_map["images_col"]
+        avg_rank_col = column_map.get("avg_rank_col")
 
         working_df = df.copy()
 
@@ -138,6 +139,18 @@ class _SKUExtractor:
         working_df["_bullet_len"] = (
             working_df[bullets_col].fillna("").astype(str).str.len()
         )
+
+        if avg_rank_col and avg_rank_col in working_df.columns:
+            avg_rank_numeric = pd.to_numeric(
+                working_df[avg_rank_col], errors="coerce"
+            )
+        else:
+            avg_rank_numeric = pd.Series(
+                float("nan"), index=working_df.index, dtype="float64"
+            )
+
+        working_df["_avg_rank_value"] = avg_rank_numeric
+        working_df["_has_avg_rank"] = avg_rank_numeric.notna()
 
         def _count_images(value: Any) -> int:
             if isinstance(value, list):
@@ -159,8 +172,16 @@ class _SKUExtractor:
         working_df["_original_order"] = range(len(working_df))
 
         sorted_df = working_df.sort_values(
-            by=[sku_col, "_desc_len", "_bullet_len", "_image_count", "_original_order"],
-            ascending=[True, False, False, False, True],
+            by=[
+                sku_col,
+                "_has_avg_rank",
+                "_avg_rank_value",
+                "_desc_len",
+                "_bullet_len",
+                "_image_count",
+                "_original_order",
+            ],
+            ascending=[True, False, True, False, False, False, True],
             kind="mergesort",
         )
 
@@ -168,7 +189,15 @@ class _SKUExtractor:
             sorted_df.groupby(sku_col, sort=False, group_keys=False).head(1).copy()
         )
         deduped = deduped.sort_values("_original_order", kind="mergesort").drop(
-            columns=["_desc_len", "_bullet_len", "_image_count", "_original_order"]
+            columns=
+            [
+                "_desc_len",
+                "_bullet_len",
+                "_image_count",
+                "_original_order",
+                "_avg_rank_value",
+                "_has_avg_rank",
+            ]
         )
         deduped.reset_index(drop=True, inplace=True)
         return deduped
