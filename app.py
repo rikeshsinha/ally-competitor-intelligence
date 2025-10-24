@@ -136,6 +136,146 @@ def get_validation_graph():
     return st.session_state["product_validation_graph"]
 
 
+def _format_competitor_options_message(choices: Dict[str, Any]) -> str:
+    options: List[Dict[str, Any]] = choices.get("options") or []
+    if not options:
+        return "No competitor SKUs are available for selection."
+    header = "Here are the competitor SKUs available for comparison:"
+    lines: List[str] = []
+    for option in options:
+        ordinal = option.get("ordinal")
+        brand = str(option.get("brand", "")).strip()
+        title = str(option.get("title_label", "")).strip()
+        if ordinal is not None:
+            lines.append(f"{ordinal}. **{brand}** — {title}")
+        else:
+            lines.append(f"- **{brand}** — {title}")
+    footer = (
+        "Reply with the number or repeat the brand/title for the competitor you'd like"
+        " to analyze."
+    )
+    return "\n\n".join([header, "\n".join(lines), footer])
+
+
+def _resolve_competitor_reply(
+    reply: str, options: List[Dict[str, Any]]
+) -> Optional[Dict[str, Any]]:
+    normalized = re.sub(r"\s+", " ", reply.strip()).lower()
+    if not normalized:
+        return None
+    number_match = re.search(r"\d+", normalized)
+    if number_match:
+        ordinal = int(number_match.group())
+        for option in options:
+            if option.get("ordinal") == ordinal:
+                return option
+    for option in options:
+        brand = str(option.get("brand", "")).strip()
+        title_label = str(option.get("title_label", "")).strip()
+        title_value = str(option.get("title_value", "")).strip()
+        variants = [brand, title_label, title_value]
+        joined = " ".join(v for v in [brand, title_label] if v)
+        dashed = " — ".join(v for v in [brand, title_label] if v)
+        if joined:
+            variants.append(joined)
+        if dashed:
+            variants.append(dashed)
+        for variant in variants:
+            variant_norm = re.sub(r"\s+", " ", variant).lower()
+            if variant_norm and normalized == variant_norm:
+                return option
+    for option in options:
+        combined = " ".join(
+            v
+            for v in [str(option.get("brand", "")).strip(), str(option.get("title_label", "")).strip()]
+            if v
+        )
+        combined_norm = re.sub(r"\s+", " ", combined).lower()
+        if combined_norm and normalized in combined_norm:
+            return option
+    return None
+
+
+def _get_option_for_selection(
+    selection: Dict[str, Any] | None, options: List[Dict[str, Any]]
+) -> Optional[Dict[str, Any]]:
+    if not isinstance(selection, dict):
+        return None
+    target_row = selection.get("row_index")
+    target_brand = selection.get("brand")
+    if target_row is None or target_brand is None:
+        return None
+    for option in options:
+        if option.get("row_index") == target_row and option.get("brand") == target_brand:
+            return option
+    return None
+
+
+def _render_competitor_selection_ui() -> Optional[Dict[str, Any]]:
+    choices = st.session_state.get("competitor_choices")
+    if not isinstance(choices, dict):
+        return st.session_state.get("selected_competitor")
+    options: List[Dict[str, Any]] = choices.get("options") or []
+    if not options:
+        return st.session_state.get("selected_competitor")
+
+    chat_log: List[Dict[str, str]] = st.session_state.setdefault(
+        "competitor_chat_log", []
+    )
+    version = choices.get("version")
+    if version and st.session_state.get("competitor_chat_rendered_version") != version:
+        st.session_state["competitor_chat_rendered_version"] = version
+        chat_log.clear()
+        st.session_state.pop("competitor_chat_confirmed", None)
+        intro = _format_competitor_options_message(choices)
+        chat_log.append({"role": "assistant", "content": intro})
+
+    current_selection = st.session_state.get("selected_competitor")
+    if current_selection and not st.session_state.get("competitor_chat_confirmed"):
+        matched_option = _get_option_for_selection(current_selection, options)
+        if matched_option:
+            confirmation = (
+                f"Using **{matched_option['brand']} — {matched_option['title_label']}** as the competitor."
+            )
+        else:
+            confirmation = "Using your previously selected competitor."
+        chat_log.append({"role": "assistant", "content": confirmation})
+        st.session_state["competitor_chat_confirmed"] = True
+
+    if not current_selection:
+        user_reply = st.chat_input(
+            "Reply with the number or brand/title of the competitor SKU to compare."
+        )
+        if user_reply:
+            chat_log.append({"role": "user", "content": user_reply})
+            resolved_option = _resolve_competitor_reply(user_reply, options)
+            if resolved_option:
+                selection_record = {
+                    "brand": resolved_option.get("brand"),
+                    "row_index": resolved_option.get("row_index"),
+                    "label": resolved_option.get("title_label"),
+                    "ordinal": resolved_option.get("ordinal"),
+                }
+                st.session_state["selected_competitor"] = selection_record
+                confirmation = (
+                    f"Thanks! We'll use **{resolved_option['brand']} — {resolved_option['title_label']}** as the competitor."
+                )
+                chat_log.append({"role": "assistant", "content": confirmation})
+                st.session_state["competitor_chat_confirmed"] = True
+            else:
+                error_message = (
+                    "I couldn't match that response. Please reply with a number from the list or repeat the brand/title exactly."
+                )
+                chat_log.append({"role": "assistant", "content": error_message})
+
+    for message in chat_log:
+        st.chat_message(message.get("role", "assistant")).markdown(
+            message.get("content", "")
+        )
+
+    return st.session_state.get("selected_competitor")
+
+
 def call_llm(
     client_data: Dict[str, Any],
     comp_data: Dict[str, Any],
@@ -341,6 +481,13 @@ csv_file = st.sidebar.file_uploader("Upload SKUs CSV (asin_data_filled.csv)", ty
 
 if csv_file is None and "uploaded_df" not in st.session_state:
     st.info("Upload a CSV to continue. Expected columns: sku_id/product_id, title, bullet_points/bullets, description, image_url(s), brand, category.")
+    st.stop()
+
+_render_competitor_selection_ui()
+
+if st.session_state.get("competitor_choices") and not st.session_state.get(
+    "selected_competitor"
+):
     st.stop()
 
 validation_graph = get_validation_graph()
