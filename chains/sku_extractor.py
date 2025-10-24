@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 import pandas as pd
 import streamlit as st
@@ -49,28 +49,51 @@ class _SKUExtractor:
             st.sidebar.warning("No competitor brands available for comparison.")
             st.stop()
 
-        selected_comp_brand = st.sidebar.selectbox(
-            "Select Competitor Brand",
-            competitor_brands,
-            index=min(1, len(competitor_brands) - 1),
+        competitor_options = self._build_competitor_options(
+            competitor_brands, brand_map
         )
-        comp_title_idx = self._select_title_for_brand(
-            brand_map,
-            selected_comp_brand,
-            "Select Competitor Title",
-            default_index=min(1, len(brand_map.get(selected_comp_brand, [])) - 1)
-            if brand_map.get(selected_comp_brand)
-            else 0,
+        if not competitor_options:
+            st.sidebar.warning("No competitor SKUs available for comparison.")
+            st.stop()
+
+        version_key = self._competitor_version_key(
+            selected_client_brand, competitor_options
         )
+        previous_state = st.session_state.get("competitor_choices")
+        previous_version: Optional[str] = None
+        if isinstance(previous_state, dict):
+            previous_version = previous_state.get("version")
+        if previous_version != version_key:
+            for key in (
+                "selected_competitor",
+                "competitor_chat_log",
+                "competitor_chat_confirmed",
+                "competitor_chat_rendered_version",
+            ):
+                st.session_state.pop(key, None)
+
+        st.session_state["competitor_choices"] = {
+            "client_brand": selected_client_brand,
+            "options": competitor_options,
+            "version": version_key,
+        }
+
+        selection = st.session_state.get("selected_competitor")
+        matched_option = self._match_competitor_selection(
+            selection, competitor_options
+        )
+        if matched_option is None:
+            st.session_state.pop("selected_competitor", None)
+            st.session_state.pop("competitor_chat_confirmed", None)
+            rerun = getattr(st, "rerun", None)
+            if callable(rerun):
+                rerun()
+            else:  # pragma: no cover - fallback for older Streamlit versions
+                st.experimental_rerun()
+            st.stop()
 
         client_idx = client_title_idx if client_title_idx is not None else 0
-        comp_idx = (
-            comp_title_idx
-            if comp_title_idx is not None
-            else min(1, len(df) - 1)
-            if len(df) > 1
-            else 0
-        )
+        comp_idx = matched_option["row_index"]
 
         client_row = df.iloc[[client_idx]] if len(df) else df.iloc[[]]
         comp_row = df.iloc[[comp_idx]] if len(df) else df.iloc[[]]
@@ -91,6 +114,20 @@ class _SKUExtractor:
 
     def _load_dataframe(self, csv_file) -> pd.DataFrame:
         if csv_file is not None:
+            file_signature = (
+                getattr(csv_file, "name", None),
+                getattr(csv_file, "size", None),
+            )
+            if st.session_state.get("_uploaded_csv_signature") != file_signature:
+                st.session_state["_uploaded_csv_signature"] = file_signature
+                for key in (
+                    "selected_competitor",
+                    "competitor_choices",
+                    "competitor_chat_log",
+                    "competitor_chat_confirmed",
+                    "competitor_chat_rendered_version",
+                ):
+                    st.session_state.pop(key, None)
             df = dataframe_from_uploaded_file(csv_file)
             st.session_state["uploaded_df"] = df
         else:
@@ -253,24 +290,83 @@ class _SKUExtractor:
         prompt: str,
         default_index: int = 0,
     ) -> int | None:
-        options = brand_map.get(brand, [])
-        if not options:
+        option_records = self._options_for_brand(brand_map, brand)
+        if not option_records:
             st.warning(f"No titles found for brand '{brand}'.")
             return None
-        counts: Dict[str, int] = {}
-        labels: List[str] = []
-        for title, _ in options:
-            count = counts.get(title, 0)
-            label = title if count == 0 else f"{title} ({count + 1})"
-            counts[title] = count + 1
-            labels.append(label)
+        labels = [record["title_label"] for record in option_records]
         selected_title = st.sidebar.selectbox(
             prompt,
             labels,
             index=min(default_index, len(labels) - 1) if labels else 0,
         )
         selected_idx = labels.index(selected_title)
-        return options[selected_idx][1]
+        return option_records[selected_idx]["row_index"]
+
+    def _options_for_brand(
+        self, brand_map: Dict[str, List[tuple[str, int]]], brand: str
+    ) -> List[Dict[str, Any]]:
+        raw_options = brand_map.get(brand, [])
+        if not raw_options:
+            return []
+        counts: Dict[str, int] = {}
+        options: List[Dict[str, Any]] = []
+        for title_value, row_index in raw_options:
+            base_title = str(title_value)
+            count = counts.get(base_title, 0)
+            label = base_title if count == 0 else f"{base_title} ({count + 1})"
+            counts[base_title] = count + 1
+            options.append(
+                {
+                    "title_value": base_title,
+                    "title_label": label,
+                    "row_index": row_index,
+                }
+            )
+        return options
+
+    def _build_competitor_options(
+        self,
+        competitor_brands: List[str],
+        brand_map: Dict[str, List[tuple[str, int]]],
+    ) -> List[Dict[str, Any]]:
+        options: List[Dict[str, Any]] = []
+        for brand in competitor_brands:
+            for record in self._options_for_brand(brand_map, brand):
+                options.append(
+                    {
+                        "brand": brand,
+                        "title_label": record["title_label"],
+                        "title_value": record["title_value"],
+                        "row_index": record["row_index"],
+                    }
+                )
+        for idx, option in enumerate(options, start=1):
+            option["ordinal"] = idx
+        return options
+
+    def _competitor_version_key(
+        self, client_brand: str, options: List[Dict[str, Any]]
+    ) -> str:
+        parts = [client_brand]
+        parts.extend(f"{opt['brand']}::{opt['row_index']}" for opt in options)
+        return "|".join(parts)
+
+    def _match_competitor_selection(
+        self,
+        selection: Any,
+        options: List[Dict[str, Any]],
+    ) -> Optional[Dict[str, Any]]:
+        if not isinstance(selection, dict):
+            return None
+        row_index = selection.get("row_index")
+        brand = selection.get("brand")
+        if row_index is None or brand is None:
+            return None
+        for option in options:
+            if option["row_index"] == row_index and option["brand"] == brand:
+                return option
+        return None
 
     def _record_from_row(self, row: pd.DataFrame, column_map: Dict[str, str]) -> Dict[str, Any]:
         sku_display = row.iloc[0]["_display_sku"] if "_display_sku" in row.columns else ""
