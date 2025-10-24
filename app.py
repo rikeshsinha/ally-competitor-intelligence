@@ -39,6 +39,7 @@ import re
 import json
 from typing import List, Dict, Any, Optional, Tuple
 
+import pandas as pd
 import streamlit as st
 
 from core.content_rules import (
@@ -418,6 +419,11 @@ with left:
         st.write(f"• {b}")
     st.write("**Description**:")
     st.write(client_data.get("description", ""))
+    client_avg_rank = client_data.get("avg_rank_search")
+    client_avg_rank_display = (
+        "—" if client_avg_rank is None or pd.isna(client_avg_rank) else str(client_avg_rank)
+    )
+    st.write(f"**Average Search Rank**: {client_avg_rank_display}")
     client_image_urls = extract_image_urls(client_data.get("image_urls", ""))
     client_image_count = len(client_image_urls)
     st.write("**Images**:")
@@ -443,6 +449,11 @@ with right:
         st.write(f"• {b}")
     st.write("**Description**:")
     st.write(comp_data.get("description", ""))
+    comp_avg_rank = comp_data.get("avg_rank_search")
+    comp_avg_rank_display = (
+        "—" if comp_avg_rank is None or pd.isna(comp_avg_rank) else str(comp_avg_rank)
+    )
+    st.write(f"**Average Search Rank**: {comp_avg_rank_display}")
     comp_image_urls = extract_image_urls(comp_data.get("image_urls", ""))
     comp_image_count = len(comp_image_urls)
     st.write("**Images**:")
