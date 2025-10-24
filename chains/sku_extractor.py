@@ -20,6 +20,8 @@ class SKUData:
 
 
 class _SKUExtractor:
+    _STATE_KEY = "_sku_extractor_state"
+
     def __call__(self, inputs: Dict[str, Any]) -> SKUData:  # type: ignore[override]
         csv_file = inputs.get("sku_file")
         if csv_file is None and "uploaded_df" not in st.session_state:
@@ -27,6 +29,46 @@ class _SKUExtractor:
                 "Upload a CSV to continue. Expected columns: sku_id/product_id, title, bullets, description, image_urls, brand, category."
             )
             st.stop()
+
+        state = st.session_state.get(self._STATE_KEY)
+        if state is None:
+            state = self._prime_state(csv_file)
+
+        if state is None:
+            st.stop()
+
+        df: pd.DataFrame = state["dataframe"]
+        column_map: Dict[str, str] = state["column_map"]
+        competitor_options: List[Dict[str, Any]] = state["competitor_options"]
+        client_idx: int = state["client_row_index"]
+
+        selection = st.session_state.get("selected_competitor")
+        matched_option = self._match_competitor_selection(
+            selection, competitor_options
+        )
+        if matched_option is None:
+            st.stop()
+
+        comp_idx = matched_option["row_index"]
+
+        client_row = df.iloc[[client_idx]] if len(df) else df.iloc[[]]
+        comp_row = df.iloc[[comp_idx]] if len(df) else df.iloc[[]]
+
+        if client_row.empty or comp_row.empty:
+            st.warning("Please select valid SKUs")
+            st.stop()
+
+        client_data = self._record_from_row(client_row, column_map)
+        comp_data = self._record_from_row(comp_row, column_map)
+
+        return SKUData(
+            dataframe=df,
+            column_map=column_map,
+            client=client_data,
+            competitor=comp_data,
+        )
+
+    def _prime_state(self, csv_file) -> Optional[Dict[str, Any]]:
         df = self._load_dataframe(csv_file)
         column_map = self._resolve_columns(df)
         df = self._deduplicate_products(df, column_map)
@@ -78,35 +120,15 @@ class _SKUExtractor:
             "version": version_key,
         }
 
-        selection = st.session_state.get("selected_competitor")
-        matched_option = self._match_competitor_selection(
-            selection, competitor_options
-        )
-        if matched_option is None:
-            st.session_state.pop("selected_competitor", None)
-            st.session_state.pop("competitor_chat_confirmed", None)
-            st.info("Waiting for competitor selection from the conversation above.")
-            st.stop()
-
         client_idx = client_title_idx if client_title_idx is not None else 0
-        comp_idx = matched_option["row_index"]
-
-        client_row = df.iloc[[client_idx]] if len(df) else df.iloc[[]]
-        comp_row = df.iloc[[comp_idx]] if len(df) else df.iloc[[]]
-
-        if client_row.empty or comp_row.empty:
-            st.warning("Please select valid SKUs")
-            st.stop()
-
-        client_data = self._record_from_row(client_row, column_map)
-        comp_data = self._record_from_row(comp_row, column_map)
-
-        return SKUData(
-            dataframe=df,
-            column_map=column_map,
-            client=client_data,
-            competitor=comp_data,
-        )
+        state = {
+            "dataframe": df,
+            "column_map": column_map,
+            "competitor_options": competitor_options,
+            "client_row_index": client_idx,
+        }
+        st.session_state[self._STATE_KEY] = state
+        return state
 
     def _load_dataframe(self, csv_file) -> pd.DataFrame:
         if csv_file is not None:
@@ -122,6 +144,7 @@ class _SKUExtractor:
                     "competitor_chat_log",
                     "competitor_chat_confirmed",
                     "competitor_chat_rendered_version",
+                    self._STATE_KEY,
                 ):
                     st.session_state.pop(key, None)
             df = dataframe_from_uploaded_file(csv_file)
@@ -390,3 +413,9 @@ class _SKUExtractor:
 def create_sku_extractor() -> RunnableLambda:
     """Return a runnable instance for SKU extraction."""
     return RunnableLambda(_SKUExtractor())
+
+
+def prime_competitor_chat_state(csv_file) -> None:
+    """Ensure SKU data and competitor options are ready for chat selection."""
+    extractor = _SKUExtractor()
+    extractor._prime_state(csv_file)
