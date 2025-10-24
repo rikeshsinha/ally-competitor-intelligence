@@ -80,11 +80,24 @@ class _SKUExtractor:
             st.stop()
 
         selected_client_brand = st.sidebar.selectbox(
-            "Select Client Brand", brands
+            "Select Client Brand",
+            brands,
+            index=None,
+            placeholder="Choose a client brand",
         )
+        if selected_client_brand is None:
+            st.sidebar.info("Select a client brand to continue.")
+            st.stop()
+
         client_title_idx = self._select_title_for_brand(
-            brand_map, selected_client_brand, "Select Client Title"
+            brand_map,
+            selected_client_brand,
+            "Select Client Title",
+            default_index=None,
         )
+        if client_title_idx is None:
+            st.sidebar.info("Select a client product to continue.")
+            st.stop()
 
         competitor_brands = [b for b in brands if b != selected_client_brand]
         if not competitor_brands:
@@ -313,18 +326,26 @@ class _SKUExtractor:
         brand_map: Dict[str, List[tuple[str, int]]],
         brand: str,
         prompt: str,
-        default_index: int = 0,
+        default_index: Optional[int] = 0,
     ) -> int | None:
         option_records = self._options_for_brand(brand_map, brand)
         if not option_records:
             st.warning(f"No titles found for brand '{brand}'.")
             return None
         labels = [record["title_label"] for record in option_records]
+        selectbox_kwargs: Dict[str, Any] = {}
+        if default_index is None:
+            selectbox_kwargs.update({"index": None, "placeholder": "Choose a client product"})
+        else:
+            selectbox_kwargs["index"] = min(default_index, len(labels) - 1) if labels else 0
+
         selected_title = st.sidebar.selectbox(
             prompt,
             labels,
-            index=min(default_index, len(labels) - 1) if labels else 0,
+            **selectbox_kwargs,
         )
+        if selected_title is None:
+            return None
         selected_idx = labels.index(selected_title)
         return option_records[selected_idx]["row_index"]
 
@@ -437,5 +458,7 @@ def create_sku_extractor() -> RunnableLambda:
 
 def prime_competitor_chat_state(csv_file) -> None:
     """Ensure SKU data and competitor options are ready for chat selection."""
+    if csv_file is None and "uploaded_df" not in st.session_state:
+        return
     extractor = _SKUExtractor()
     extractor._prime_state(csv_file)
