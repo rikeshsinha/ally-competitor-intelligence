@@ -44,10 +44,15 @@ class _SKUExtractor:
             brand_map, selected_client_brand, "Select Client Title"
         )
 
+        competitor_brands = [b for b in brands if b != selected_client_brand]
+        if not competitor_brands:
+            st.sidebar.warning("No competitor brands available for comparison.")
+            st.stop()
+
         selected_comp_brand = st.sidebar.selectbox(
             "Select Competitor Brand",
-            brands,
-            index=min(1, len(brands) - 1),
+            competitor_brands,
+            index=min(1, len(competitor_brands) - 1),
         )
         comp_title_idx = self._select_title_for_brand(
             brand_map,
