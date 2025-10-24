@@ -95,7 +95,7 @@ class _SKUExtractor:
     def _resolve_columns(self, df: pd.DataFrame) -> Dict[str, str]:
         cols_lower = {c.lower(): c for c in df.columns}
 
-        def pick(*candidates: str, default: str = "") -> str:
+        def pick(*candidates: str, default: Any = "") -> str:
             for cand in candidates:
                 key = cand.lower()
                 if key in cols_lower:
@@ -112,6 +112,7 @@ class _SKUExtractor:
             "brand_col": pick("brand", "brand_name", "retailer_brand_name"),
             "category_col": pick("category", "node", "retailer_category_node"),
             "universe_col": pick("universe"),
+            "avg_rank_col": pick("avg_rank_search", default=pd.NA),
         }
 
     def _show_mapping(self, column_map: Dict[str, str]) -> None:
@@ -250,6 +251,7 @@ class _SKUExtractor:
             "image_urls": row.iloc[0][column_map["images_col"]],
             "brand": row.iloc[0][column_map["brand_col"]],
             "category": row.iloc[0][column_map["category_col"]],
+            "avg_rank_search": row.iloc[0][column_map["avg_rank_col"]],
         }
         uni_col = column_map.get("universe_col")
         if uni_col in row.columns:
