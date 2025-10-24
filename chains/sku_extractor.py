@@ -1,7 +1,7 @@
 """LangChain runnable that loads SKU data and captures user selections."""
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Dict, List
 
 import pandas as pd
@@ -9,10 +9,6 @@ import streamlit as st
 from langchain_core.runnables import RunnableLambda
 
 from core.content_rules import dataframe_from_uploaded_file
-from .similar_products import (
-    SimilarProductMatch,
-    create_similar_products_chain,
-)
 
 
 @dataclass
@@ -21,7 +17,6 @@ class SKUData:
     column_map: Dict[str, str]
     client: Dict[str, Any]
     competitor: Dict[str, Any]
-    similar_competitors: List[SimilarProductMatch] = field(default_factory=list)
 
 
 class _SKUExtractor:
@@ -87,22 +82,11 @@ class _SKUExtractor:
         client_data = self._record_from_row(client_row, column_map)
         comp_data = self._record_from_row(comp_row, column_map)
 
-        similar_chain = create_similar_products_chain()
-        similar_result = similar_chain.invoke(
-            {
-                "dataframe": df,
-                "column_map": column_map,
-                "client": client_data,
-            }
-        )
-        similar_matches = getattr(similar_result, "matches", [])
-
         return SKUData(
             dataframe=df,
             column_map=column_map,
             client=client_data,
             competitor=comp_data,
-            similar_competitors=list(similar_matches),
         )
 
     def _load_dataframe(self, csv_file) -> pd.DataFrame:

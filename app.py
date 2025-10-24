@@ -51,7 +51,6 @@ from core.content_rules import (
 )
 from graph.product_validation import build_product_validation_graph
 from chains.rule_extractor import RuleExtraction
-from chains.similar_products import SimilarProductsResult
 
 # Optional OpenAI SDK (gracefully handle if not installed or no key)
 try:
@@ -348,7 +347,6 @@ validation_graph = get_validation_graph()
 result = validation_graph.invoke({"rules_file": rules_file, "sku_file": csv_file})
 sku_data = result.get("sku_data")
 rule_data = result.get("rule_data")
-similar_result = result.get("similar_products")
 summary = result.get("validation", {})
 
 if sku_data is None or rule_data is None:
@@ -403,9 +401,6 @@ if not _display_rule_messages(rules_notes):
 
 client_data = getattr(sku_data, "client", {})
 comp_data = getattr(sku_data, "competitor", {})
-similar_matches = list(getattr(sku_data, "similar_competitors", []) or [])
-if isinstance(similar_result, SimilarProductsResult) and not similar_matches:
-    similar_matches = list(similar_result.matches)
 
 # Two-column layout for side-by-side comparison
 left, right = st.columns(2)
@@ -438,35 +433,6 @@ with left:
             st.markdown(f"{idx}. [{url}]({url})")
     else:
         st.markdown("_No image URLs provided._")
-
-    with st.expander("Similar competitor products", expanded=False):
-        if similar_matches:
-            if isinstance(similar_result, SimilarProductsResult):
-                caption = similar_result.message
-                if not caption and similar_result.using_llm:
-                    caption = "Used OpenAI ranking"
-                if caption:
-                    st.caption(caption)
-            for match in similar_matches:
-                brand_label = match.brand or "—"
-                sku_label = match.sku or "—"
-                st.markdown(f"**{brand_label}** — `{sku_label}`")
-                title_text = match.title or "—"
-                st.write(title_text)
-                bundle_display = (
-                    str(match.bundle_size)
-                    if match.bundle_size is not None
-                    else "—"
-                )
-                meta_parts = [f"Bundle size: {bundle_display}"]
-                if match.score is not None:
-                    meta_parts.append(f"score {match.score:.2f}")
-                st.caption(" · ".join(meta_parts))
-                if match.reason:
-                    st.write(match.reason)
-                st.write("")
-        else:
-            st.info("No similar competitor products identified yet.")
 
 with right:
     st.subheader("Competitor SKU")
