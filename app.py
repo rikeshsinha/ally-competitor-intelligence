@@ -137,24 +137,44 @@ def get_validation_graph():
     return st.session_state["product_validation_graph"]
 
 
-def _format_competitor_options_message(choices: Dict[str, Any]) -> str:
-    options: List[Dict[str, Any]] = choices.get("options") or []
+def _format_brand_options_message(choices: Dict[str, Any]) -> str:
+    brands: List[Dict[str, Any]] = choices.get("brand_groups") or []
+    if not brands:
+        return "No competitor brands are available for selection."
+    header = "First, choose which competitor brand you'd like to review:"
+    lines: List[str] = []
+    for brand_record in brands:
+        ordinal = brand_record.get("ordinal")
+        brand_name = str(brand_record.get("brand", "")).strip()
+        if ordinal is not None:
+            lines.append(f"{ordinal}. **{brand_name}**")
+        else:
+            lines.append(f"- **{brand_name}**")
+    footer = "Reply with the number or the brand name to continue."
+    return "\n\n".join([header, "\n".join(lines), footer])
+
+
+def _format_product_options_message(brand_record: Dict[str, Any]) -> str:
+    brand_name = str(brand_record.get("brand", "")).strip()
+    options: List[Dict[str, Any]] = brand_record.get("options") or []
     if not options:
-        return "No competitor SKUs are available for selection."
-    header = "Here are the competitor SKUs available for comparison:"
+        return (
+            f"I couldn't find any products for **{brand_name or 'this brand'}**. "
+            "Please choose another brand."
+        )
+    header = (
+        f"Great! Now pick the product from **{brand_name}** you'd like to use "
+        "as the competitor:"
+    )
     lines: List[str] = []
     for option in options:
-        ordinal = option.get("ordinal")
-        brand = str(option.get("brand", "")).strip()
+        ordinal = option.get("brand_option_ordinal")
         title = str(option.get("title_label", "")).strip()
         if ordinal is not None:
-            lines.append(f"{ordinal}. **{brand}** — {title}")
+            lines.append(f"{ordinal}. {title}")
         else:
-            lines.append(f"- **{brand}** — {title}")
-    footer = (
-        "Reply with the number or repeat the brand/title for the competitor you'd like"
-        " to analyze."
-    )
+            lines.append(f"- {title}")
+    footer = "Reply with the number or the product title to confirm the competitor SKU."
     return "\n\n".join([header, "\n".join(lines), footer])
 
 
@@ -168,6 +188,9 @@ def _resolve_competitor_reply(
     if number_match:
         ordinal = int(number_match.group())
         for option in options:
+            brand_ordinal = option.get("brand_option_ordinal")
+            if brand_ordinal is not None and brand_ordinal == ordinal:
+                return option
             if option.get("ordinal") == ordinal:
                 return option
     for option in options:
@@ -197,6 +220,40 @@ def _resolve_competitor_reply(
     return None
 
 
+def _resolve_brand_reply(
+    reply: str, brand_groups: List[Dict[str, Any]]
+) -> Optional[Dict[str, Any]]:
+    normalized = re.sub(r"\s+", " ", reply.strip()).lower()
+    if not normalized:
+        return None
+    number_match = re.search(r"\d+", normalized)
+    if number_match:
+        ordinal = int(number_match.group())
+        for brand_record in brand_groups:
+            if brand_record.get("ordinal") == ordinal:
+                return brand_record
+    for brand_record in brand_groups:
+        brand_name = str(brand_record.get("brand", "")).strip()
+        if brand_name and normalized == brand_name.lower():
+            return brand_record
+    for brand_record in brand_groups:
+        brand_name = str(brand_record.get("brand", "")).strip().lower()
+        if brand_name and normalized in brand_name:
+            return brand_record
+    return None
+
+
+def _get_brand_record(
+    brand_groups: List[Dict[str, Any]], brand_name: Optional[str]
+) -> Optional[Dict[str, Any]]:
+    if not brand_name:
+        return None
+    for record in brand_groups:
+        if record.get("brand") == brand_name:
+            return record
+    return None
+
+
 def _get_option_for_selection(
     selection: Dict[str, Any] | None, options: List[Dict[str, Any]]
 ) -> Optional[Dict[str, Any]]:
@@ -217,7 +274,8 @@ def _render_competitor_selection_ui() -> Optional[Dict[str, Any]]:
     if not isinstance(choices, dict):
         return st.session_state.get("selected_competitor")
     options: List[Dict[str, Any]] = choices.get("options") or []
-    if not options:
+    brand_groups: List[Dict[str, Any]] = choices.get("brand_groups") or []
+    if not options or not brand_groups:
         return st.session_state.get("selected_competitor")
 
     chat_log: List[Dict[str, str]] = st.session_state.setdefault(
@@ -228,7 +286,9 @@ def _render_competitor_selection_ui() -> Optional[Dict[str, Any]]:
         st.session_state["competitor_chat_rendered_version"] = version
         chat_log.clear()
         st.session_state.pop("competitor_chat_confirmed", None)
-        intro = _format_competitor_options_message(choices)
+        st.session_state.pop("selected_competitor_brand", None)
+        st.session_state.pop("competitor_product_prompt_brand", None)
+        intro = _format_brand_options_message(choices)
         chat_log.append({"role": "assistant", "content": intro})
 
     current_selection = st.session_state.get("selected_competitor")
@@ -244,30 +304,71 @@ def _render_competitor_selection_ui() -> Optional[Dict[str, Any]]:
         st.session_state["competitor_chat_confirmed"] = True
 
     if not current_selection:
-        user_reply = st.chat_input(
-            "Reply with the number or brand/title of the competitor SKU to compare."
+        selected_brand = st.session_state.get("selected_competitor_brand")
+        brand_record = _get_brand_record(brand_groups, selected_brand)
+
+        if selected_brand and brand_record:
+            prompted_brand = st.session_state.get("competitor_product_prompt_brand")
+            if prompted_brand != selected_brand:
+                product_prompt = _format_product_options_message(brand_record)
+                chat_log.append({"role": "assistant", "content": product_prompt})
+                st.session_state["competitor_product_prompt_brand"] = selected_brand
+
+        prompt_text = (
+            "Reply with the number or the brand name to choose a competitor brand."
+            if not selected_brand
+            else f"Reply with the number or title of the {selected_brand} product to use as the competitor."
         )
+
+        user_reply = st.chat_input(prompt_text)
         if user_reply:
             chat_log.append({"role": "user", "content": user_reply})
-            resolved_option = _resolve_competitor_reply(user_reply, options)
-            if resolved_option:
-                selection_record = {
-                    "brand": resolved_option.get("brand"),
-                    "row_index": resolved_option.get("row_index"),
-                    "label": resolved_option.get("title_label"),
-                    "ordinal": resolved_option.get("ordinal"),
-                }
-                st.session_state["selected_competitor"] = selection_record
-                confirmation = (
-                    f"Thanks! We'll use **{resolved_option['brand']} — {resolved_option['title_label']}** as the competitor."
-                )
-                chat_log.append({"role": "assistant", "content": confirmation})
-                st.session_state["competitor_chat_confirmed"] = True
+            if not selected_brand:
+                resolved_brand = _resolve_brand_reply(user_reply, brand_groups)
+                if resolved_brand:
+                    brand_name = resolved_brand.get("brand")
+                    st.session_state["selected_competitor_brand"] = brand_name
+                    confirmation = (
+                        f"Thanks! We'll look at **{brand_name}**. Now choose a product from that brand."
+                    )
+                    chat_log.append({"role": "assistant", "content": confirmation})
+                    product_prompt = _format_product_options_message(resolved_brand)
+                    chat_log.append({"role": "assistant", "content": product_prompt})
+                    st.session_state["competitor_product_prompt_brand"] = brand_name
+                else:
+                    error_message = (
+                        "I couldn't match that brand. Please reply with a number from the list or repeat the brand name exactly."
+                    )
+                    chat_log.append({"role": "assistant", "content": error_message})
             else:
-                error_message = (
-                    "I couldn't match that response. Please reply with a number from the list or repeat the brand/title exactly."
-                )
-                chat_log.append({"role": "assistant", "content": error_message})
+                if not brand_record:
+                    st.session_state.pop("selected_competitor_brand", None)
+                    error_message = (
+                        "The selected brand is no longer available. Please choose a brand again."
+                    )
+                    chat_log.append({"role": "assistant", "content": error_message})
+                else:
+                    resolved_option = _resolve_competitor_reply(
+                        user_reply, brand_record.get("options") or []
+                    )
+                    if resolved_option:
+                        selection_record = {
+                            "brand": resolved_option.get("brand"),
+                            "row_index": resolved_option.get("row_index"),
+                            "label": resolved_option.get("title_label"),
+                            "ordinal": resolved_option.get("ordinal"),
+                        }
+                        st.session_state["selected_competitor"] = selection_record
+                        confirmation = (
+                            f"Excellent choice. We'll use **{resolved_option['brand']} — {resolved_option['title_label']}** as the competitor."
+                        )
+                        chat_log.append({"role": "assistant", "content": confirmation})
+                        st.session_state["competitor_chat_confirmed"] = True
+                    else:
+                        error_message = (
+                            "I couldn't match that product. Please reply with a number from the list or repeat the product title exactly."
+                        )
+                        chat_log.append({"role": "assistant", "content": error_message})
 
     for message in chat_log:
         st.chat_message(message.get("role", "assistant")).markdown(

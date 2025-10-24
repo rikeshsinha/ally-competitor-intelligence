@@ -91,7 +91,7 @@ class _SKUExtractor:
             st.sidebar.warning("No competitor brands available for comparison.")
             st.stop()
 
-        competitor_options = self._build_competitor_options(
+        brand_groups, competitor_options = self._build_competitor_catalog(
             competitor_brands, brand_map
         )
         if not competitor_options:
@@ -108,15 +108,19 @@ class _SKUExtractor:
         if previous_version != version_key:
             for key in (
                 "selected_competitor",
+                "selected_competitor_brand",
+                "competitor_choices",
                 "competitor_chat_log",
                 "competitor_chat_confirmed",
                 "competitor_chat_rendered_version",
+                "competitor_product_prompt_brand",
             ):
                 st.session_state.pop(key, None)
 
         st.session_state["competitor_choices"] = {
             "client_brand": selected_client_brand,
             "options": competitor_options,
+            "brand_groups": brand_groups,
             "version": version_key,
         }
 
@@ -140,10 +144,12 @@ class _SKUExtractor:
                 st.session_state["_uploaded_csv_signature"] = file_signature
                 for key in (
                     "selected_competitor",
+                    "selected_competitor_brand",
                     "competitor_choices",
                     "competitor_chat_log",
                     "competitor_chat_confirmed",
                     "competitor_chat_rendered_version",
+                    "competitor_product_prompt_brand",
                     self._STATE_KEY,
                 ):
                     st.session_state.pop(key, None)
@@ -344,25 +350,39 @@ class _SKUExtractor:
             )
         return options
 
-    def _build_competitor_options(
+    def _build_competitor_catalog(
         self,
         competitor_brands: List[str],
         brand_map: Dict[str, List[tuple[str, int]]],
-    ) -> List[Dict[str, Any]]:
-        options: List[Dict[str, Any]] = []
-        for brand in competitor_brands:
-            for record in self._options_for_brand(brand_map, brand):
-                options.append(
+    ) -> tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+        brand_groups: List[Dict[str, Any]] = []
+        flat_options: List[Dict[str, Any]] = []
+        global_counter = 1
+        for brand_idx, brand in enumerate(competitor_brands, start=1):
+            brand_options: List[Dict[str, Any]] = []
+            for option_idx, record in enumerate(
+                self._options_for_brand(brand_map, brand), start=1
+            ):
+                option = {
+                    "brand": brand,
+                    "title_label": record["title_label"],
+                    "title_value": record["title_value"],
+                    "row_index": record["row_index"],
+                    "ordinal": global_counter,
+                    "brand_option_ordinal": option_idx,
+                }
+                brand_options.append(option)
+                flat_options.append(option)
+                global_counter += 1
+            if brand_options:
+                brand_groups.append(
                     {
                         "brand": brand,
-                        "title_label": record["title_label"],
-                        "title_value": record["title_value"],
-                        "row_index": record["row_index"],
+                        "ordinal": brand_idx,
+                        "options": brand_options,
                     }
                 )
-        for idx, option in enumerate(options, start=1):
-            option["ordinal"] = idx
-        return options
+        return brand_groups, flat_options
 
     def _competitor_version_key(
         self, client_brand: str, options: List[Dict[str, Any]]
