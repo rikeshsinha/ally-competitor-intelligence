@@ -51,6 +51,7 @@ from core.content_rules import (
 )
 from graph.product_validation import build_product_validation_graph
 from chains.rule_extractor import RuleExtraction
+from chains.sku_extractor import prime_competitor_chat_state
 
 # Optional OpenAI SDK (gracefully handle if not installed or no key)
 try:
@@ -483,6 +484,7 @@ if csv_file is None and "uploaded_df" not in st.session_state:
     st.info("Upload a CSV to continue. Expected columns: sku_id/product_id, title, bullet_points/bullets, description, image_url(s), brand, category.")
     st.stop()
 
+prime_competitor_chat_state(csv_file)
 _render_competitor_selection_ui()
 
 if st.session_state.get("competitor_choices") and not st.session_state.get(
