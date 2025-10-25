@@ -34,6 +34,7 @@ Notes
 """
 
 from __future__ import annotations
+import math
 import os
 import re
 import json
@@ -59,6 +60,7 @@ from chains.sku_extractor import (
     CLIENT_SELECTION_SESSION_KEYS,
     prime_competitor_chat_state,
 )
+from chains.competitor_finder import find_similar_competitors
 
 # Optional OpenAI SDK (gracefully handle if not installed or no key)
 try:
@@ -1292,6 +1294,36 @@ if user_reply:
                     writer(_stream())
                 else:
                     st.markdown(answer_text)
+
+        elif action == "find_competitors":
+            recommendations = find_similar_competitors(sku_data)
+            st.session_state["issues_gaps_found_competitors"] = recommendations
+            if recommendations:
+                lines = [
+                    "Here are some similar competitor SKUs I found:",
+                    "",
+                ]
+                for idx, rec in enumerate(recommendations, start=1):
+                    rank_value = rec.get("rank")
+                    if isinstance(rank_value, (int, float)) and math.isfinite(rank_value):
+                        rank_display = f"{rank_value:g}"
+                    else:
+                        rank_display = "N/A"
+                    lines.append(
+                        (
+                            f"{idx}. {rec.get('brand') or '—'} — {rec.get('title') or 'Untitled'} "
+                            f"(SKU: {rec.get('sku') or '—'}, search rank: {rank_display})"
+                        )
+                    )
+                message = "\n".join(lines)
+            else:
+                message = (
+                    "I couldn't find any similar competitors right now, but we can keep going "
+                    "with the review."
+                )
+            chat_history.append({"role": "assistant", "content": message})
+            with st.chat_message("assistant"):
+                st.markdown(message)
 
         elif action == "select_competitor":
             note = "Sure — let's pick a different competitor. Resetting that step now."

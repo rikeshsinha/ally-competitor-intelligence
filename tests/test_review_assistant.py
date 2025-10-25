@@ -62,6 +62,13 @@ def test_heuristic_select_competitor():
     assert action == "select_competitor"
 
 
+def test_heuristic_find_competitors():
+    action = classify_review_followup(
+        "summary", "Can you find competitors or show similar products?"
+    )
+    assert action == "find_competitors"
+
+
 def test_heuristic_stop():
     action = classify_review_followup("summary", "No thanks, that's all")
     assert action == "stop"
@@ -85,6 +92,13 @@ def test_llm_result_overrides_heuristic():
     client = _DummyClient(payload)
     action = classify_review_followup("summary", "Maybe", client=client)
     assert action == "select_competitor"
+
+
+def test_llm_find_competitors_action():
+    payload = json.dumps({"action": "find_competitors"})
+    client = _DummyClient(payload)
+    action = classify_review_followup("summary", "Maybe", client=client)
+    assert action == "find_competitors"
 
 
 def test_llm_answer_question_override():
