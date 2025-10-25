@@ -138,6 +138,14 @@ def get_validation_graph():
     return st.session_state["product_validation_graph"]
 
 
+def _trigger_rerun() -> None:
+    """Call the appropriate Streamlit rerun helper across API versions."""
+    rerun_fn = getattr(st, "rerun", None) or getattr(st, "experimental_rerun", None)
+    if rerun_fn is None:  # pragma: no cover - defensive guard for unexpected versions
+        raise AttributeError("Streamlit rerun helper is unavailable")
+    rerun_fn()
+
+
 def _format_brand_dropdown_label(option: Optional[Dict[str, Any]]) -> str:
     if not option:
         return "Select a brand"
@@ -808,7 +816,7 @@ if decision == "yes":
     if st.button("Hold off for now", key="issues_gaps_change_to_no"):
         st.session_state[decision_key] = "no"
         st.session_state[decision_version_key] = issues_gaps_version
-        st.experimental_rerun()
+        _trigger_rerun()
 elif decision == "no":
     with st.chat_message("user"):
         st.markdown("Not yet — I need to review or adjust before drafting edits.")
@@ -816,22 +824,22 @@ elif decision == "no":
     if change_cols[0].button("I'm ready to draft edits now", key="issues_gaps_ready_yes"):
         st.session_state[decision_key] = "yes"
         st.session_state[decision_version_key] = issues_gaps_version
-        st.experimental_rerun()
+        _trigger_rerun()
     if change_cols[1].button("Reset decision", key="issues_gaps_reset_decision"):
         st.session_state.pop(decision_key, None)
         st.session_state.pop(decision_version_key, None)
-        st.experimental_rerun()
+        _trigger_rerun()
 else:
     st.caption("Would you like me to draft compliant edits based on this review?")
     action_cols = st.columns(2)
     if action_cols[0].button("Yes – draft compliant edits", key="issues_gaps_yes"):
         st.session_state[decision_key] = "yes"
         st.session_state[decision_version_key] = issues_gaps_version
-        st.experimental_rerun()
+        _trigger_rerun()
     if action_cols[1].button("Not yet", key="issues_gaps_no"):
         st.session_state[decision_key] = "no"
         st.session_state[decision_version_key] = issues_gaps_version
-        st.experimental_rerun()
+        _trigger_rerun()
 
 decision = (
     st.session_state.get(decision_key)
