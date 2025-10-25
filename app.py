@@ -569,6 +569,7 @@ def call_llm(
     client_data: Dict[str, Any],
     comp_data: Dict[str, Any],
     rules: Dict[str, Any],
+    user_context: Optional[str] = None,
 ) -> Dict[str, Any]:
     client = get_openai_client()
     prompt = USER_PROMPT_TEMPLATE.format(
@@ -582,6 +583,12 @@ def call_llm(
         k_desc=comp_data.get("description", ""),
         rule_json=json.dumps(rules, indent=2, sort_keys=True),
     )
+
+    normalized_context = (user_context or "").strip()
+    if normalized_context:
+        prompt = "\n\n".join(
+            [prompt, f"USER GUIDANCE:\n{normalized_context}"]
+        )
 
     if client is None:
         # Heuristic fallback: create simple suggestions without LLM
@@ -640,7 +647,7 @@ def call_llm(
         if not desc and fixed_bullets:
             desc = " ".join(fixed_bullets)
         desc = re.sub(r"\s+", " ", desc)[: rules["description"]["max_chars"]].strip()
-        return {
+        response = {
             "title_edit": title,
             "bullets_edits": fixed_bullets,
             "description_edit": desc,
@@ -651,6 +658,9 @@ def call_llm(
             ],
             "_llm": False,
         }
+        if normalized_context:
+            response["user_guidance"] = f"USER GUIDANCE:\n{normalized_context}"
+        return response
 
     # Real LLM call
     try:
@@ -669,7 +679,7 @@ def call_llm(
         return data
     except Exception as e:
         # Fallback to heuristic
-        return {
+        response = {
             "title_edit": enforce_title_caps(
                 (client_data.get("title") or "")[: rules["title"]["max_chars"]]
             ),
@@ -684,6 +694,9 @@ def call_llm(
             "rationales": ["LLM error; generated heuristic placeholders"],
             "_llm": False,
         }
+        if normalized_context:
+            response["user_guidance"] = f"USER GUIDANCE:\n{normalized_context}"
+        return response
 
 
 def _format_rules_for_answer(rules: Dict[str, Any]) -> str:
@@ -1216,8 +1229,26 @@ if user_reply:
             with st.chat_message("assistant"):
                 st.markdown(acknowledgement)
 
+            user_context_entries = []
+            for item in chat_history:
+                if item.get("role") != "user":
+                    continue
+                content = str(item.get("content", "")).strip()
+                if not content:
+                    continue
+                normalized = re.sub(r"\s+", " ", content)
+                if normalized:
+                    user_context_entries.append(normalized)
+            st.session_state["issues_gaps_user_context"] = user_context_entries
+            user_context_str = "\n".join(user_context_entries) if user_context_entries else None
+
             with st.spinner("Generating suggestions..."):
-                llm_out = call_llm(client_data, comp_data, current_rules)
+                llm_out = call_llm(
+                    client_data,
+                    comp_data,
+                    current_rules,
+                    user_context=user_context_str,
+                )
             st.session_state["llm_out"] = llm_out
             st.session_state.pop(stop_key, None)
 
