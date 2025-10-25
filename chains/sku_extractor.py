@@ -3,13 +3,38 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Sequence
 
 import pandas as pd
 import streamlit as st
 from langchain_core.runnables import RunnableLambda
 
 from core.content_rules import dataframe_from_uploaded_file
+
+
+CLIENT_SELECTION_SESSION_KEYS: Sequence[str] = (
+    "selected_client",
+    "selected_client_brand",
+    "client_chat_log",
+    "client_chat_confirmed",
+    "client_chat_rendered_version",
+    "client_brand_user_ack",
+    "client_product_user_ack",
+    "client_product_select_key",
+)
+
+COMPETITOR_SELECTION_SESSION_KEYS: Sequence[str] = (
+    "selected_competitor",
+    "selected_competitor_brand",
+    "competitor_choices",
+    "competitor_chat_log",
+    "competitor_chat_confirmed",
+    "competitor_chat_rendered_version",
+    "competitor_product_prompt_brand",
+    "competitor_brand_user_ack",
+    "competitor_product_user_ack",
+    "competitor_product_select_key",
+)
 
 
 @dataclass
@@ -22,6 +47,10 @@ class SKUData:
 
 class _SKUExtractor:
     _STATE_KEY = "_sku_extractor_state"
+
+    def _clear_session_state_keys(self, keys: Sequence[str]) -> None:
+        for key in keys:
+            st.session_state.pop(key, None)
 
     def __call__(self, inputs: Dict[str, Any]) -> SKUData:  # type: ignore[override]
         csv_file = inputs.get("sku_file")
@@ -40,11 +69,37 @@ class _SKUExtractor:
 
         df: pd.DataFrame = state["dataframe"]
         column_map: Dict[str, str] = state["column_map"]
-        competitor_options: List[Dict[str, Any]] = state["competitor_options"]
-        client_idx: int = state["client_row_index"]
+        brand_map: Dict[str, List[tuple[str, int]]] = state.get("brand_map", {})
+        brands: List[str] = state.get("brands", [])
+
+        client_selection = st.session_state.get("selected_client")
+        matched_client = self._match_client_selection(client_selection, brand_map)
+        if matched_client is None:
+            state["client_row_index"] = None
+            state["competitor_options"] = []
+            if client_selection:
+                self._clear_session_state_keys(CLIENT_SELECTION_SESSION_KEYS)
+            self._clear_session_state_keys(COMPETITOR_SELECTION_SESSION_KEYS)
+            st.info("Select a client brand and product to continue.")
+            st.stop()
+
+        client_idx = matched_client["row_index"]
+        state["client_row_index"] = client_idx
+
+        competitor_options = self._ensure_competitor_state(
+            matched_client.get("brand", ""),
+            brands,
+            brand_map,
+            state,
+            show_messages=True,
+        )
+        if not competitor_options:
+            st.stop()
 
         selection = st.session_state.get("selected_competitor")
-        matched_option = self._match_competitor_selection(selection, competitor_options)
+        matched_option = self._match_competitor_selection(
+            selection, competitor_options
+        )
         if matched_option is None:
             st.stop()
 
@@ -59,6 +114,8 @@ class _SKUExtractor:
 
         client_data = self._record_from_row(client_row, column_map)
         comp_data = self._record_from_row(comp_row, column_map)
+
+        st.session_state[self._STATE_KEY] = state
 
         return SKUData(
             dataframe=df,
@@ -78,74 +135,44 @@ class _SKUExtractor:
             st.warning("No SKU identifiers found in the uploaded file.")
             st.stop()
 
-        selected_client_brand = st.sidebar.selectbox(
-            "Select Client Brand",
-            brands,
-            index=None,
-            placeholder="Choose a client brand",
+        client_brand_groups, client_options = self._build_competitor_catalog(
+            brands, brand_map
         )
-        if selected_client_brand is None:
-            st.sidebar.info("Select a client brand to continue.")
-            st.stop()
+        client_version = self._client_version_key(client_options)
+        previous_client_state = st.session_state.get("client_choices")
+        previous_client_version: Optional[str] = None
+        if isinstance(previous_client_state, dict):
+            previous_client_version = previous_client_state.get("version")
+        if previous_client_version != client_version:
+            self._clear_session_state_keys(CLIENT_SELECTION_SESSION_KEYS)
+            self._clear_session_state_keys(COMPETITOR_SELECTION_SESSION_KEYS)
 
-        client_title_idx = self._select_title_for_brand(
-            brand_map,
-            selected_client_brand,
-            "Select Client Title",
-            default_index=None,
-        )
-        if client_title_idx is None:
-            st.sidebar.info("Select a client product to continue.")
-            st.stop()
-
-        competitor_brands = [b for b in brands if b != selected_client_brand]
-        if not competitor_brands:
-            st.sidebar.warning("No competitor brands available for comparison.")
-            st.stop()
-
-        brand_groups, competitor_options = self._build_competitor_catalog(
-            competitor_brands, brand_map
-        )
-        if not competitor_options:
-            st.sidebar.warning("No competitor SKUs available for comparison.")
-            st.stop()
-
-        version_key = self._competitor_version_key(
-            selected_client_brand, competitor_options
-        )
-        previous_state = st.session_state.get("competitor_choices")
-        previous_version: Optional[str] = None
-        if isinstance(previous_state, dict):
-            previous_version = previous_state.get("version")
-        if previous_version != version_key:
-            for key in (
-                "selected_competitor",
-                "selected_competitor_brand",
-                "competitor_choices",
-                "competitor_chat_log",
-                "competitor_chat_confirmed",
-                "competitor_chat_rendered_version",
-                "competitor_product_prompt_brand",
-                "competitor_brand_user_ack",
-                "competitor_product_user_ack",
-                "competitor_product_select_key",
-            ):
-                st.session_state.pop(key, None)
-
-        st.session_state["competitor_choices"] = {
-            "client_brand": selected_client_brand,
-            "options": competitor_options,
-            "brand_groups": brand_groups,
-            "version": version_key,
+        st.session_state["client_choices"] = {
+            "brand_groups": client_brand_groups,
+            "options": client_options,
+            "version": client_version,
         }
 
-        client_idx = client_title_idx if client_title_idx is not None else 0
-        state = {
+        state: Dict[str, Any] = {
             "dataframe": df,
             "column_map": column_map,
-            "competitor_options": competitor_options,
-            "client_row_index": client_idx,
+            "brand_map": brand_map,
+            "brands": brands,
+            "competitor_options": [],
+            "client_row_index": None,
         }
+
+        selected_client = st.session_state.get("selected_client")
+        matched_client = self._match_client_selection(selected_client, brand_map)
+        if matched_client:
+            self._ensure_competitor_state(
+                matched_client.get("brand", ""),
+                brands,
+                brand_map,
+                state,
+                show_messages=False,
+            )
+
         st.session_state[self._STATE_KEY] = state
         return state
 
@@ -157,20 +184,12 @@ class _SKUExtractor:
             )
             if st.session_state.get("_uploaded_csv_signature") != file_signature:
                 st.session_state["_uploaded_csv_signature"] = file_signature
-                for key in (
-                    "selected_competitor",
-                    "selected_competitor_brand",
-                    "competitor_choices",
-                    "competitor_chat_log",
-                    "competitor_chat_confirmed",
-                    "competitor_chat_rendered_version",
-                    "competitor_product_prompt_brand",
-                    "competitor_brand_user_ack",
-                    "competitor_product_user_ack",
-                    "competitor_product_select_key",
-                    self._STATE_KEY,
-                ):
-                    st.session_state.pop(key, None)
+                self._clear_session_state_keys(
+                    COMPETITOR_SELECTION_SESSION_KEYS
+                )
+                self._clear_session_state_keys(CLIENT_SELECTION_SESSION_KEYS)
+                st.session_state.pop("client_choices", None)
+                st.session_state.pop(self._STATE_KEY, None)
             df = dataframe_from_uploaded_file(csv_file)
             st.session_state["uploaded_df"] = df
         else:
@@ -376,6 +395,81 @@ class _SKUExtractor:
                 }
             )
         return options
+
+    def _client_version_key(self, options: List[Dict[str, Any]]) -> str:
+        if not options:
+            return ""
+        parts = []
+        for opt in options:
+            brand = str(opt.get("brand", ""))
+            row_index = opt.get("row_index")
+            parts.append(f"{brand}::{row_index}")
+        return "|".join(parts)
+
+    def _match_client_selection(
+        self,
+        selection: Any,
+        brand_map: Dict[str, List[tuple[str, int]]],
+    ) -> Optional[Dict[str, Any]]:
+        if not isinstance(selection, dict):
+            return None
+        brand = selection.get("brand")
+        row_index = selection.get("row_index")
+        if brand is None or row_index is None:
+            return None
+        options = self._options_for_brand(brand_map, brand)
+        for option in options:
+            if option["row_index"] == row_index:
+                matched = option.copy()
+                matched["brand"] = brand
+                return matched
+        return None
+
+    def _ensure_competitor_state(
+        self,
+        client_brand: str,
+        brands: List[str],
+        brand_map: Dict[str, List[tuple[str, int]]],
+        state: Dict[str, Any],
+        *,
+        show_messages: bool,
+    ) -> Optional[List[Dict[str, Any]]]:
+        client_brand = str(client_brand or "").strip()
+        if not client_brand:
+            state["competitor_options"] = []
+            self._clear_session_state_keys(COMPETITOR_SELECTION_SESSION_KEYS)
+            return None
+        competitor_brands = [b for b in brands if b != client_brand]
+        if not competitor_brands:
+            state["competitor_options"] = []
+            self._clear_session_state_keys(COMPETITOR_SELECTION_SESSION_KEYS)
+            if show_messages:
+                st.warning("No competitor brands available for comparison.")
+            return None
+        brand_groups, competitor_options = self._build_competitor_catalog(
+            competitor_brands, brand_map
+        )
+        if not competitor_options:
+            state["competitor_options"] = []
+            self._clear_session_state_keys(COMPETITOR_SELECTION_SESSION_KEYS)
+            if show_messages:
+                st.warning("No competitor SKUs available for comparison.")
+            return None
+        version_key = self._competitor_version_key(client_brand, competitor_options)
+        previous_state = st.session_state.get("competitor_choices")
+        previous_version: Optional[str] = None
+        if isinstance(previous_state, dict):
+            previous_version = previous_state.get("version")
+        if previous_version != version_key:
+            self._clear_session_state_keys(COMPETITOR_SELECTION_SESSION_KEYS)
+        st.session_state["competitor_choices"] = {
+            "client_brand": client_brand,
+            "options": competitor_options,
+            "brand_groups": brand_groups,
+            "version": version_key,
+        }
+        state["competitor_options"] = competitor_options
+        return competitor_options
 
     def _build_competitor_catalog(
         self,
