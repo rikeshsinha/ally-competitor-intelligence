@@ -13,10 +13,12 @@ class _DummyCompletions:
     def __init__(self, payload, *, raises=False):
         self._payload = payload
         self._raises = raises
+        self.last_kwargs = None
 
-    def create(self, **_):
+    def create(self, **kwargs):
         if self._raises:
             raise RuntimeError("boom")
+        self.last_kwargs = kwargs
         return type(
             "Resp",
             (),
@@ -113,3 +115,33 @@ def test_llm_failure_falls_back_to_answer_question():
         client=client,
     )
     assert action == "answer_question"
+
+
+def test_llm_payload_includes_additional_products():
+    payload = json.dumps({"action": "clarify"})
+    client = _DummyClient(payload)
+    extra_products = [{"brand": "Brand B", "row_index": 5}]
+    classify_review_followup(
+        "summary",
+        "Maybe",
+        client=client,
+        additional_products=extra_products,
+    )
+    kwargs = client.chat.completions.last_kwargs
+    assert kwargs is not None
+    message_payload = json.loads(kwargs["messages"][1]["content"])
+    assert message_payload["additional_products"] == extra_products
+
+
+def test_llm_payload_omits_additional_products_when_missing():
+    payload = json.dumps({"action": "clarify"})
+    client = _DummyClient(payload)
+    classify_review_followup(
+        "summary",
+        "Maybe",
+        client=client,
+    )
+    kwargs = client.chat.completions.last_kwargs
+    assert kwargs is not None
+    message_payload = json.loads(kwargs["messages"][1]["content"])
+    assert "additional_products" not in message_payload
