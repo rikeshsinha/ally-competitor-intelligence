@@ -127,6 +127,9 @@ class _SKUExtractor:
                 "competitor_chat_confirmed",
                 "competitor_chat_rendered_version",
                 "competitor_product_prompt_brand",
+                "competitor_brand_user_ack",
+                "competitor_product_user_ack",
+                "competitor_product_select_key",
             ):
                 st.session_state.pop(key, None)
 
@@ -163,6 +166,9 @@ class _SKUExtractor:
                     "competitor_chat_confirmed",
                     "competitor_chat_rendered_version",
                     "competitor_product_prompt_brand",
+                    "competitor_brand_user_ack",
+                    "competitor_product_user_ack",
+                    "competitor_product_select_key",
                     self._STATE_KEY,
                 ):
                     st.session_state.pop(key, None)
