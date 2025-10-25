@@ -9,6 +9,7 @@ from typing import Any, Dict, Literal, Optional
 Action = Literal[
     "generate_edits",
     "select_competitor",
+    "find_competitors",
     "stop",
     "clarify",
     "answer_question",
@@ -17,6 +18,7 @@ Action = Literal[
 _ALLOWED_ACTIONS = {
     "generate_edits",
     "select_competitor",
+    "find_competitors",
     "stop",
     "clarify",
     "answer_question",
@@ -47,9 +49,9 @@ _LLM_SYSTEM_PROMPT = (
     "You orchestrate a review workflow for Amazon PDP content. "
     "Choose one action based on the latest issues summary and the user's reply. "
     "Actions: generate_edits (draft compliant edits now), select_competitor (ask user to pick a new competitor), "
-    "stop (end the workflow), clarify (ask for more info), answer_question (respond directly to a question about the "
-    "rules or provided product data using the answer_question tool). Return JSON with a single key 'action' using one "
-    "of the allowed values."
+    "find_competitors (surface similar competitor products automatically), stop (end the workflow), clarify (ask for "
+    "more info), answer_question (respond directly to a question about the rules or provided product data using the "
+    "answer_question tool). Return JSON with a single key 'action' using one of the allowed values."
 )
 
 
@@ -63,6 +65,23 @@ def _heuristic_classification(summary: str, user_input: str) -> Action:
         return "clarify"
 
     normalized = re.sub(r"\s+", " ", text.lower())
+
+    find_competitor_triggers = [
+        "find competitor",
+        "find competitors",
+        "show similar product",
+        "show similar products",
+        "recommend competitor",
+        "recommend competitors",
+        "suggest competitor",
+        "suggest competitors",
+        "show competitors",
+        "show competitor products",
+        "similar competitors",
+    ]
+    for trigger in find_competitor_triggers:
+        if trigger in normalized:
+            return "find_competitors"
 
     competitor_triggers = [
         "different competitor",
