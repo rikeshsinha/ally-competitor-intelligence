@@ -37,6 +37,7 @@ from __future__ import annotations
 import os
 import re
 import json
+import hashlib
 from typing import List, Dict, Any, Optional, Tuple
 
 import pandas as pd
@@ -736,27 +737,57 @@ with col3:
 with col4:
     st.metric("Images (client vs comp)", f"{summary['images']['client_count']} vs {summary['images']['comp_count']}")
 
-with st.expander("Issues & Gaps"):
-    if summary["title"]["issues"]:
-        st.markdown("**Title**")
-        for i in summary["title"]["issues"]:
-            st.write("- ", i)
-    if summary["bullets"]["issues"]:
-        st.markdown("**Bullets**")
-        for i in summary["bullets"]["issues"]:
-            st.write("- ", i)
-    if summary["description"]["issues"]:
-        st.markdown("**Description**")
-        for i in summary["description"]["issues"]:
-            st.write("- ", i)
-    if summary["images"]["issues"]:
-        st.markdown("**Images**")
-        for i in summary["images"]["issues"]:
-            st.write("- ", i)
-    if summary.get("gaps_vs_competitor"):
-        st.markdown("**Gaps vs competitor**")
-        for g in summary["gaps_vs_competitor"]:
-            st.write("- ", g)
+issues_gaps_source = {
+    "summary": summary,
+    "competitor": st.session_state.get("selected_competitor"),
+    "client_sku": client_data.get("sku"),
+}
+issues_gaps_version_payload = json.dumps(
+    issues_gaps_source, sort_keys=True, default=str
+).encode("utf-8")
+issues_gaps_version = hashlib.md5(issues_gaps_version_payload).hexdigest()
+stored_issues_gaps_version = st.session_state.get("issues_gaps_rendered_version")
+
+issues_gaps_sections = []
+for label, issues in (
+    ("Title", summary.get("title", {}).get("issues", [])),
+    ("Bullets", summary.get("bullets", {}).get("issues", [])),
+    ("Description", summary.get("description", {}).get("issues", [])),
+    ("Images", summary.get("images", {}).get("issues", [])),
+):
+    filtered = [str(i).strip() for i in issues if str(i).strip()]
+    if filtered:
+        block_lines = [f"**{label}**"]
+        block_lines.extend(f"- {issue}" for issue in filtered)
+        issues_gaps_sections.append("\n".join(block_lines))
+
+gaps_vs_competitor = [
+    str(g).strip() for g in summary.get("gaps_vs_competitor", []) if str(g).strip()
+]
+if gaps_vs_competitor:
+    gap_lines = ["**Gaps vs competitor**"]
+    gap_lines.extend(f"- {gap}" for gap in gaps_vs_competitor)
+    issues_gaps_sections.append("\n".join(gap_lines))
+
+if not issues_gaps_sections:
+    issues_gaps_sections.append(
+        "**All clear**\n- No rule violations or competitive gaps detected."
+    )
+
+issues_gaps_message = "\n\n".join(issues_gaps_sections)
+issues_gaps_message += "\n\nReady for me to draft compliant edits based on this review? (Yes/No)"
+
+if (
+    issues_gaps_version != stored_issues_gaps_version
+    or st.session_state.get("issues_gaps_message") is None
+):
+    st.session_state["issues_gaps_rendered_version"] = issues_gaps_version
+    st.session_state["issues_gaps_message"] = issues_gaps_message
+
+stored_message = st.session_state.get("issues_gaps_message")
+if stored_message:
+    with st.chat_message("assistant"):
+        st.markdown(stored_message)
 
 st.divider()
 
