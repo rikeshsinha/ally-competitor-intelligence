@@ -137,110 +137,27 @@ def get_validation_graph():
     return st.session_state["product_validation_graph"]
 
 
-def _format_brand_options_message(choices: Dict[str, Any]) -> str:
-    brands: List[Dict[str, Any]] = choices.get("brand_groups") or []
-    if not brands:
-        return "No competitor brands are available for selection."
-    header = "First, choose which competitor brand you'd like to review:"
-    lines: List[str] = []
-    for brand_record in brands:
-        ordinal = brand_record.get("ordinal")
-        brand_name = str(brand_record.get("brand", "")).strip()
-        if ordinal is not None:
-            lines.append(f"{ordinal}. **{brand_name}**")
-        else:
-            lines.append(f"- **{brand_name}**")
-    footer = "Reply with the number or the brand name to continue."
-    return "\n\n".join([header, "\n".join(lines), footer])
+def _format_brand_dropdown_label(option: Optional[Dict[str, Any]]) -> str:
+    if not option:
+        return "Select a brand"
+    brand_name = str(option.get("brand", "")).strip() or "Unnamed brand"
+    ordinal = option.get("ordinal")
+    if ordinal is not None:
+        return f"{ordinal}. {brand_name}"
+    return brand_name
 
 
-def _format_product_options_message(brand_record: Dict[str, Any]) -> str:
-    brand_name = str(brand_record.get("brand", "")).strip()
-    options: List[Dict[str, Any]] = brand_record.get("options") or []
-    if not options:
-        return (
-            f"I couldn't find any products for **{brand_name or 'this brand'}**. "
-            "Please choose another brand."
-        )
-    header = (
-        f"Great! Now pick the product from **{brand_name}** you'd like to use "
-        "as the competitor:"
+def _format_product_dropdown_label(option: Optional[Dict[str, Any]]) -> str:
+    if not option:
+        return "Select a product"
+    title = (
+        str(option.get("title_label") or option.get("title_value") or "").strip()
+        or "Unnamed product"
     )
-    lines: List[str] = []
-    for option in options:
-        ordinal = option.get("brand_option_ordinal")
-        title = str(option.get("title_label", "")).strip()
-        if ordinal is not None:
-            lines.append(f"{ordinal}. {title}")
-        else:
-            lines.append(f"- {title}")
-    footer = "Reply with the number or the product title to confirm the competitor SKU."
-    return "\n\n".join([header, "\n".join(lines), footer])
-
-
-def _resolve_competitor_reply(
-    reply: str, options: List[Dict[str, Any]]
-) -> Optional[Dict[str, Any]]:
-    normalized = re.sub(r"\s+", " ", reply.strip()).lower()
-    if not normalized:
-        return None
-    number_match = re.search(r"\d+", normalized)
-    if number_match:
-        ordinal = int(number_match.group())
-        for option in options:
-            brand_ordinal = option.get("brand_option_ordinal")
-            if brand_ordinal is not None and brand_ordinal == ordinal:
-                return option
-            if option.get("ordinal") == ordinal:
-                return option
-    for option in options:
-        brand = str(option.get("brand", "")).strip()
-        title_label = str(option.get("title_label", "")).strip()
-        title_value = str(option.get("title_value", "")).strip()
-        variants = [brand, title_label, title_value]
-        joined = " ".join(v for v in [brand, title_label] if v)
-        dashed = " — ".join(v for v in [brand, title_label] if v)
-        if joined:
-            variants.append(joined)
-        if dashed:
-            variants.append(dashed)
-        for variant in variants:
-            variant_norm = re.sub(r"\s+", " ", variant).lower()
-            if variant_norm and normalized == variant_norm:
-                return option
-    for option in options:
-        combined = " ".join(
-            v
-            for v in [str(option.get("brand", "")).strip(), str(option.get("title_label", "")).strip()]
-            if v
-        )
-        combined_norm = re.sub(r"\s+", " ", combined).lower()
-        if combined_norm and normalized in combined_norm:
-            return option
-    return None
-
-
-def _resolve_brand_reply(
-    reply: str, brand_groups: List[Dict[str, Any]]
-) -> Optional[Dict[str, Any]]:
-    normalized = re.sub(r"\s+", " ", reply.strip()).lower()
-    if not normalized:
-        return None
-    number_match = re.search(r"\d+", normalized)
-    if number_match:
-        ordinal = int(number_match.group())
-        for brand_record in brand_groups:
-            if brand_record.get("ordinal") == ordinal:
-                return brand_record
-    for brand_record in brand_groups:
-        brand_name = str(brand_record.get("brand", "")).strip()
-        if brand_name and normalized == brand_name.lower():
-            return brand_record
-    for brand_record in brand_groups:
-        brand_name = str(brand_record.get("brand", "")).strip().lower()
-        if brand_name and normalized in brand_name:
-            return brand_record
-    return None
+    ordinal = option.get("brand_option_ordinal") or option.get("ordinal")
+    if ordinal is not None:
+        return f"{ordinal}. {title}"
+    return title
 
 
 def _get_brand_record(
@@ -278,18 +195,22 @@ def _render_competitor_selection_ui() -> Optional[Dict[str, Any]]:
     if not options or not brand_groups:
         return st.session_state.get("selected_competitor")
 
-    chat_log: List[Dict[str, str]] = st.session_state.setdefault(
-        "competitor_chat_log", []
-    )
     version = choices.get("version")
     if version and st.session_state.get("competitor_chat_rendered_version") != version:
         st.session_state["competitor_chat_rendered_version"] = version
-        chat_log.clear()
         st.session_state.pop("competitor_chat_confirmed", None)
         st.session_state.pop("selected_competitor_brand", None)
         st.session_state.pop("competitor_product_prompt_brand", None)
-        intro = _format_brand_options_message(choices)
-        chat_log.append({"role": "assistant", "content": intro})
+        st.session_state.pop("competitor_brand_user_ack", None)
+        st.session_state.pop("competitor_product_user_ack", None)
+        product_key = st.session_state.pop("competitor_product_select_key", None)
+        if product_key:
+            st.session_state.pop(product_key, None)
+        for key in list(st.session_state.keys()):
+            if key.startswith("competitor_brand_select_") or key.startswith(
+                "competitor_product_select_"
+            ):
+                st.session_state.pop(key, None)
 
     current_selection = st.session_state.get("selected_competitor")
     if current_selection and not st.session_state.get("competitor_chat_confirmed"):
@@ -300,82 +221,138 @@ def _render_competitor_selection_ui() -> Optional[Dict[str, Any]]:
             )
         else:
             confirmation = "Using your previously selected competitor."
-        chat_log.append({"role": "assistant", "content": confirmation})
         st.session_state["competitor_chat_confirmed"] = True
 
-    if not current_selection:
-        selected_brand = st.session_state.get("selected_competitor_brand")
-        brand_record = _get_brand_record(brand_groups, selected_brand)
+    brand_groups_with_placeholder: List[Optional[Dict[str, Any]]] = [None]
+    brand_groups_with_placeholder.extend(brand_groups)
+    brand_select_key = f"competitor_brand_select_{version or 'default'}"
+    selected_brand_name = st.session_state.get("selected_competitor_brand")
+    current_brand_record = _get_brand_record(brand_groups, selected_brand_name)
+    brand_index = 0
+    if current_brand_record and current_brand_record in brand_groups_with_placeholder:
+        brand_index = brand_groups_with_placeholder.index(current_brand_record)
 
-        if selected_brand and brand_record:
-            prompted_brand = st.session_state.get("competitor_product_prompt_brand")
-            if prompted_brand != selected_brand:
-                product_prompt = _format_product_options_message(brand_record)
-                chat_log.append({"role": "assistant", "content": product_prompt})
-                st.session_state["competitor_product_prompt_brand"] = selected_brand
-
-        prompt_text = (
-            "Reply with the number or the brand name to choose a competitor brand."
-            if not selected_brand
-            else f"Reply with the number or title of the {selected_brand} product to use as the competitor."
+    with st.chat_message("assistant"):
+        st.markdown("First, choose which competitor brand you'd like to review:")
+        selected_brand_option = st.selectbox(
+            "Select a competitor brand",
+            options=brand_groups_with_placeholder,
+            index=brand_index,
+            format_func=_format_brand_dropdown_label,
+            key=brand_select_key,
+            label_visibility="collapsed",
         )
 
-        user_reply = st.chat_input(prompt_text)
-        if user_reply:
-            chat_log.append({"role": "user", "content": user_reply})
-            if not selected_brand:
-                resolved_brand = _resolve_brand_reply(user_reply, brand_groups)
-                if resolved_brand:
-                    brand_name = resolved_brand.get("brand")
-                    st.session_state["selected_competitor_brand"] = brand_name
-                    confirmation = (
-                        f"Thanks! We'll look at **{brand_name}**. Now choose a product from that brand."
-                    )
-                    chat_log.append({"role": "assistant", "content": confirmation})
-                    product_prompt = _format_product_options_message(resolved_brand)
-                    chat_log.append({"role": "assistant", "content": product_prompt})
-                    st.session_state["competitor_product_prompt_brand"] = brand_name
-                else:
-                    error_message = (
-                        "I couldn't match that brand. Please reply with a number from the list or repeat the brand name exactly."
-                    )
-                    chat_log.append({"role": "assistant", "content": error_message})
-            else:
-                if not brand_record:
-                    st.session_state.pop("selected_competitor_brand", None)
-                    error_message = (
-                        "The selected brand is no longer available. Please choose a brand again."
-                    )
-                    chat_log.append({"role": "assistant", "content": error_message})
-                else:
-                    resolved_option = _resolve_competitor_reply(
-                        user_reply, brand_record.get("options") or []
-                    )
-                    if resolved_option:
-                        selection_record = {
-                            "brand": resolved_option.get("brand"),
-                            "row_index": resolved_option.get("row_index"),
-                            "label": resolved_option.get("title_label"),
-                            "ordinal": resolved_option.get("ordinal"),
-                        }
-                        st.session_state["selected_competitor"] = selection_record
-                        confirmation = (
-                            f"Excellent choice. We'll use **{resolved_option['brand']} — {resolved_option['title_label']}** as the competitor."
-                        )
-                        chat_log.append({"role": "assistant", "content": confirmation})
-                        st.session_state["competitor_chat_confirmed"] = True
-                    else:
-                        error_message = (
-                            "I couldn't match that product. Please reply with a number from the list or repeat the product title exactly."
-                        )
-                        chat_log.append({"role": "assistant", "content": error_message})
+    if selected_brand_option is None:
+        st.session_state.pop("selected_competitor_brand", None)
+        st.session_state.pop("competitor_brand_user_ack", None)
+        prev_product_key = st.session_state.pop("competitor_product_select_key", None)
+        if prev_product_key:
+            st.session_state.pop(prev_product_key, None)
+        st.session_state.pop("competitor_product_user_ack", None)
+        st.session_state.pop("selected_competitor", None)
+        st.session_state.pop("competitor_chat_confirmed", None)
+    else:
+        brand_name = str(selected_brand_option.get("brand", "")).strip()
+        previous_brand = st.session_state.get("selected_competitor_brand")
+        if brand_name:
+            st.session_state["selected_competitor_brand"] = brand_name
+            if previous_brand != brand_name:
+                prev_product_key = st.session_state.pop("competitor_product_select_key", None)
+                if prev_product_key:
+                    st.session_state.pop(prev_product_key, None)
+                st.session_state.pop("competitor_product_user_ack", None)
+                st.session_state.pop("selected_competitor", None)
+                st.session_state.pop("competitor_chat_confirmed", None)
+        else:
+            st.session_state.pop("selected_competitor_brand", None)
 
-    for message in chat_log:
-        st.chat_message(message.get("role", "assistant")).markdown(
-            message.get("content", "")
+    brand_name = st.session_state.get("selected_competitor_brand")
+    if brand_name:
+        st.session_state["competitor_brand_user_ack"] = brand_name
+    else:
+        st.session_state.pop("competitor_brand_user_ack", None)
+
+    brand_ack = st.session_state.get("competitor_brand_user_ack")
+    if brand_ack:
+        with st.chat_message("user"):
+            st.markdown(f"Let's review **{brand_ack}**.")
+
+    brand_record = _get_brand_record(brand_groups, brand_name)
+    selected_product_option: Optional[Dict[str, Any]] = None
+
+    if brand_record:
+        product_options = brand_record.get("options") or []
+        matched_option = _get_option_for_selection(
+            st.session_state.get("selected_competitor"), product_options
         )
+        product_index = 0
+        product_options_with_placeholder: List[Optional[Dict[str, Any]]] = [None]
+        product_options_with_placeholder.extend(product_options)
+        if matched_option and matched_option in product_options_with_placeholder:
+            product_index = product_options_with_placeholder.index(matched_option)
+        product_key = f"competitor_product_select_{version or 'default'}_{brand_record.get('brand')}"
+        st.session_state["competitor_product_select_key"] = product_key
 
-    return st.session_state.get("selected_competitor")
+        with st.chat_message("assistant"):
+            st.markdown(
+                f"Now pick the product from **{brand_record.get('brand', 'this brand')}** you'd like to use as the competitor:"
+            )
+            selected_product_option = st.selectbox(
+                "Select a competitor product",
+                options=product_options_with_placeholder,
+                index=product_index,
+                format_func=_format_product_dropdown_label,
+                key=product_key,
+                label_visibility="collapsed",
+            )
+
+    if selected_product_option is None:
+        if brand_record is None:
+            st.session_state.pop("competitor_product_select_key", None)
+        st.session_state.pop("competitor_product_user_ack", None)
+        st.session_state.pop("selected_competitor", None)
+        st.session_state.pop("competitor_chat_confirmed", None)
+    else:
+        selection_record = {
+            "brand": selected_product_option.get("brand"),
+            "row_index": selected_product_option.get("row_index"),
+            "label": selected_product_option.get("title_label")
+            or selected_product_option.get("title_value"),
+            "ordinal": selected_product_option.get("ordinal")
+            or selected_product_option.get("brand_option_ordinal"),
+        }
+        st.session_state["selected_competitor"] = selection_record
+        st.session_state["competitor_chat_confirmed"] = True
+        label = selection_record.get("label")
+        if label:
+            st.session_state["competitor_product_user_ack"] = (
+                f"{selection_record.get('brand', '')} — {label}"
+            )
+        else:
+            st.session_state["competitor_product_user_ack"] = selection_record.get(
+                "brand"
+            )
+
+    product_ack = st.session_state.get("competitor_product_user_ack")
+    if product_ack:
+        with st.chat_message("user"):
+            st.markdown(f"Compare against **{product_ack}**.")
+
+    final_selection = st.session_state.get("selected_competitor")
+    if final_selection and st.session_state.get("competitor_chat_confirmed"):
+        competitor_brand = final_selection.get("brand") or "the selected brand"
+        competitor_label = final_selection.get("label")
+        if competitor_label:
+            confirmation_text = (
+                f"Using **{competitor_brand} — {competitor_label}** as the competitor."
+            )
+        else:
+            confirmation_text = f"Using **{competitor_brand}** as the competitor."
+        with st.chat_message("assistant"):
+            st.markdown(confirmation_text)
+
+    return final_selection
 
 
 def call_llm(
