@@ -13,17 +13,17 @@ What it does
 
 How to run
 ----------
-1) Install deps:  
+1) Install deps:
    pip install streamlit pandas openai tiktoken python-dotenv
 
 2) Put your files in the same folder as this script:
    - asin_data_filled.csv
    - PetSupplies_PetFood_Styleguide_EN_AE._CB1198675309_.pdf (for reference only; rules are encoded below)
 
-3) Set your OpenAI key (or provider of choice):  
-   export OPENAI_API_KEY=sk-...  
+3) Set your OpenAI key (or provider of choice):
+   export OPENAI_API_KEY=sk-...
 
-4) Start the app:  
+4) Start the app:
    streamlit run app.py
 
 Notes
@@ -53,7 +53,7 @@ from core.content_rules import (
 )
 from graph.product_validation import build_product_validation_graph
 from chains.rule_extractor import RuleExtraction
-from chains.review_orchestrator import classify_review_followup
+from chains.review_assistant import classify_review_followup
 from chains.sku_extractor import prime_competitor_chat_state
 
 # Optional OpenAI SDK (gracefully handle if not installed or no key)
@@ -128,6 +128,7 @@ def validate_openai_key() -> Tuple[bool, str]:
 
 def get_validation_graph():
     if "product_validation_graph" not in st.session_state:
+
         def _run_validation(sku_data, rule_data: RuleExtraction):
             rules = rule_data.rules or DEFAULT_RULES
             client = getattr(sku_data, "client", {})
@@ -192,7 +193,10 @@ def _get_option_for_selection(
     if target_row is None or target_brand is None:
         return None
     for option in options:
-        if option.get("row_index") == target_row and option.get("brand") == target_brand:
+        if (
+            option.get("row_index") == target_row
+            and option.get("brand") == target_brand
+        ):
             return option
     return None
 
@@ -227,9 +231,7 @@ def _render_competitor_selection_ui() -> Optional[Dict[str, Any]]:
     if current_selection and not st.session_state.get("competitor_chat_confirmed"):
         matched_option = _get_option_for_selection(current_selection, options)
         if matched_option:
-            confirmation = (
-                f"Using **{matched_option['brand']} — {matched_option['title_label']}** as the competitor."
-            )
+            confirmation = f"Using **{matched_option['brand']} — {matched_option['title_label']}** as the competitor."
         else:
             confirmation = "Using your previously selected competitor."
         st.session_state["competitor_chat_confirmed"] = True
@@ -269,7 +271,9 @@ def _render_competitor_selection_ui() -> Optional[Dict[str, Any]]:
         if brand_name:
             st.session_state["selected_competitor_brand"] = brand_name
             if previous_brand != brand_name:
-                prev_product_key = st.session_state.pop("competitor_product_select_key", None)
+                prev_product_key = st.session_state.pop(
+                    "competitor_product_select_key", None
+                )
                 if prev_product_key:
                     st.session_state.pop(prev_product_key, None)
                 st.session_state.pop("competitor_product_user_ack", None)
@@ -420,10 +424,7 @@ def call_llm(
             clauses = re.split(r"[\n\r;]+|(?<=[.!?])\s+", description_text)
             for clause in clauses:
                 normalized_clause = _normalize_clause(clause)
-                if (
-                    normalized_clause
-                    and normalized_clause not in normalized_bullets
-                ):
+                if normalized_clause and normalized_clause not in normalized_bullets:
                     normalized_bullets.append(normalized_clause)
                 if len(normalized_bullets) >= max_bullets:
                     break
@@ -474,9 +475,17 @@ def call_llm(
     except Exception as e:
         # Fallback to heuristic
         return {
-            "title_edit": enforce_title_caps((client_data.get("title") or "")[: rules["title"]["max_chars"]]),
-            "bullets_edits": ["Durable construction", "Comfortable fit", "Easy to clean"],
-            "description_edit": "Compact design for everyday use; easy to clean; ideal for most pets"[: rules["description"]["max_chars"]],
+            "title_edit": enforce_title_caps(
+                (client_data.get("title") or "")[: rules["title"]["max_chars"]]
+            ),
+            "bullets_edits": [
+                "Durable construction",
+                "Comfortable fit",
+                "Easy to clean",
+            ],
+            "description_edit": "Compact design for everyday use; easy to clean; ideal for most pets"[
+                : rules["description"]["max_chars"]
+            ],
             "rationales": ["LLM error; generated heuristic placeholders"],
             "_llm": False,
         }
@@ -496,22 +505,19 @@ def _format_rules_for_answer(rules: Dict[str, Any]) -> str:
             f"- Bullets: up to {bullet_rules.get('max_count', 'n/a')} entries; max length ≈ {bullet_rules.get('max_chars', 'n/a')} each"
         )
     if desc_rules:
-        parts.append(
-            f"- Description: ≤{desc_rules.get('max_chars', 'n/a')} characters"
-        )
+        parts.append(f"- Description: ≤{desc_rules.get('max_chars', 'n/a')} characters")
     other_rules = [
         key for key in rules.keys() if key not in {"title", "bullets", "description"}
     ]
     if other_rules:
-        parts.append(
-            "- Additional policies: "
-            + ", ".join(sorted(other_rules))
-        )
+        parts.append("- Additional policies: " + ", ".join(sorted(other_rules)))
     return "\n".join(parts)
 
 
 def _summarize_product(label: str, data: Dict[str, Any]) -> str:
-    bullets = [f"• {b}" for b in split_bullets(data.get("bullets", "")) if str(b).strip()]
+    bullets = [
+        f"• {b}" for b in split_bullets(data.get("bullets", "")) if str(b).strip()
+    ]
     details = [
         f"Brand: {data.get('brand', '—')}",
         f"SKU: {data.get('sku', data.get('sku_id', '—'))}",
@@ -540,19 +546,18 @@ def _fallback_answer(
     sections: List[str] = []
     if any(token in lower_q for token in ["rule", "guideline", "limit", "allow"]):
         sections.append(rule_text)
-    if any(token in lower_q for token in ["client", "sku", "product", "title", "bullet", "description"]):
+    if any(
+        token in lower_q
+        for token in ["client", "sku", "product", "title", "bullet", "description"]
+    ):
         sections.append(client_text)
     if any(token in lower_q for token in ["competitor", "compare", "gap", "issue"]):
         sections.append(competitor_text)
     if issues_summary and ("issue" in lower_q or "gap" in lower_q):
         sections.append("Issues & gaps summary:\n" + issues_summary)
     if not sections:
-        sections.extend(
-            [rule_text, client_text, competitor_text]
-        )
-    header = (
-        "I don't have model access right now, but here's what I can confirm from the uploaded materials:"
-    )
+        sections.extend([rule_text, client_text, competitor_text])
+    header = "I don't have model access right now, but here's what I can confirm from the uploaded materials:"
     return header + "\n\n" + "\n\n".join(sections)
 
 
@@ -686,11 +691,15 @@ with st.expander("About this demo"):
 
 # Sidebar: LLM settings
 st.sidebar.header("LLM Settings")
-_ui_key = st.sidebar.text_input("OpenAI API Key", type="password", value=st.session_state.get("OPENAI_API_KEY_UI", ""))
+_ui_key = st.sidebar.text_input(
+    "OpenAI API Key",
+    type="password",
+    value=st.session_state.get("OPENAI_API_KEY_UI", ""),
+)
 if _ui_key != st.session_state.get("OPENAI_API_KEY_UI"):
     st.session_state["OPENAI_API_KEY_UI"] = _ui_key
 
-col_a, col_b = st.sidebar.columns([1,1])
+col_a, col_b = st.sidebar.columns([1, 1])
 if col_a.button("Validate key"):
     ok, err = validate_openai_key()
     if ok:
@@ -703,20 +712,33 @@ if col_a.button("Validate key"):
 # Status pill
 valid_flag = st.session_state.get("openai_valid")
 if valid_flag is True:
-    st.sidebar.markdown('<div style="display:inline-block;padding:4px 10px;border-radius:999px;background:#16a34a;color:#fff;font-weight:600">OpenAI: Valid</div>', unsafe_allow_html=True)
+    st.sidebar.markdown(
+        '<div style="display:inline-block;padding:4px 10px;border-radius:999px;background:#16a34a;color:#fff;font-weight:600">OpenAI: Valid</div>',
+        unsafe_allow_html=True,
+    )
 elif (_ui_key or os.getenv("OPENAI_API_KEY")) and valid_flag is False:
-    st.sidebar.markdown('<div style="display:inline-block;padding:4px 10px;border-radius:999px;background:#dc2626;color:#fff;font-weight:600">OpenAI: Invalid</div>', unsafe_allow_html=True)
+    st.sidebar.markdown(
+        '<div style="display:inline-block;padding:4px 10px;border-radius:999px;background:#dc2626;color:#fff;font-weight:600">OpenAI: Invalid</div>',
+        unsafe_allow_html=True,
+    )
 else:
-    st.sidebar.markdown('<div style="display:inline-block;padding:4px 10px;border-radius:999px;background:#6b7280;color:#fff;font-weight:600">OpenAI: Not set</div>', unsafe_allow_html=True)
+    st.sidebar.markdown(
+        '<div style="display:inline-block;padding:4px 10px;border-radius:999px;background:#6b7280;color:#fff;font-weight:600">OpenAI: Not set</div>',
+        unsafe_allow_html=True,
+    )
 
 # Sidebar: file inputs
 st.sidebar.header("Inputs")
 rules_file = st.sidebar.file_uploader("Upload Rules PDF", type=["pdf"], key="rules_pdf")
 
-csv_file = st.sidebar.file_uploader("Upload SKUs CSV (asin_data_filled.csv)", type=["csv"], key="csv_uploader")
+csv_file = st.sidebar.file_uploader(
+    "Upload SKUs CSV (asin_data_filled.csv)", type=["csv"], key="csv_uploader"
+)
 
 if csv_file is None and "uploaded_df" not in st.session_state:
-    st.info("Upload a CSV to continue. Expected columns: sku_id/product_id, title, bullet_points/bullets, description, image_url(s), brand, category.")
+    st.info(
+        "Upload a CSV to continue. Expected columns: sku_id/product_id, title, bullet_points/bullets, description, image_url(s), brand, category."
+    )
     st.stop()
 
 prime_competitor_chat_state(csv_file)
@@ -795,9 +817,9 @@ with left:
     if client_sku_original and client_sku_original != client_sku_display:
         client_sku_display = f"{client_sku_display} (original: {client_sku_original})"
     st.write(f"**SKU**: {client_sku_display or '—'}")
-    st.write(f"**Brand**: {client_data.get('brand','')}")
+    st.write(f"**Brand**: {client_data.get('brand', '')}")
     st.write(f"**Universe**: {client_data.get('universe', '') or '—'}")
-    st.write(f"**Title**: {client_data.get('title','')}")
+    st.write(f"**Title**: {client_data.get('title', '')}")
     st.write("**Bullets**:")
     for b in split_bullets(client_data.get("bullets", "")):
         st.write(f"• {b}")
@@ -805,7 +827,9 @@ with left:
     st.write(client_data.get("description", ""))
     client_avg_rank = client_data.get("avg_rank_search")
     client_avg_rank_display = (
-        "—" if client_avg_rank is None or pd.isna(client_avg_rank) else str(client_avg_rank)
+        "—"
+        if client_avg_rank is None or pd.isna(client_avg_rank)
+        else str(client_avg_rank)
     )
     st.write(f"**Average Search Rank**: {client_avg_rank_display}")
     client_image_urls = extract_image_urls(client_data.get("image_urls", ""))
@@ -825,9 +849,9 @@ with right:
     if comp_sku_original and comp_sku_original != comp_sku_display:
         comp_sku_display = f"{comp_sku_display} (original: {comp_sku_original})"
     st.write(f"**SKU**: {comp_sku_display or '—'}")
-    st.write(f"**Brand**: {comp_data.get('brand','')}")
+    st.write(f"**Brand**: {comp_data.get('brand', '')}")
     st.write(f"**Universe**: {comp_data.get('universe', '') or '—'}")
-    st.write(f"**Title**: {comp_data.get('title','')}")
+    st.write(f"**Title**: {comp_data.get('title', '')}")
     st.write("**Bullets**:")
     for b in split_bullets(comp_data.get("bullets", "")):
         st.write(f"• {b}")
@@ -856,6 +880,7 @@ title_limit = rules_for_display["title"]["max_chars"]
 bullet_limit = rules_for_display["bullets"]["max_count"]
 desc_limit = rules_for_display["description"]["max_chars"]
 
+
 def _format_rules_notes(notes: Any) -> str:
     if not notes:
         return ""
@@ -863,6 +888,7 @@ def _format_rules_notes(notes: Any) -> str:
         filtered = [str(n) for n in notes if n]
         return "; ".join(filtered)
     return str(notes)
+
 
 formatted_rules_notes = _format_rules_notes(rules_notes)
 
@@ -891,7 +917,10 @@ with col3:
         help=f"≤{desc_limit} chars, no promo, no ALL CAPS",
     )
 with col4:
-    st.metric("Images (client vs comp)", f"{summary['images']['client_count']} vs {summary['images']['comp_count']}")
+    st.metric(
+        "Images (client vs comp)",
+        f"{summary['images']['client_count']} vs {summary['images']['comp_count']}",
+    )
 
 issues_gaps_source = {
     "summary": summary,
@@ -1021,6 +1050,7 @@ if user_reply:
             with st.chat_message("assistant"):
                 writer = getattr(st, "write_stream", None)
                 if callable(writer):
+
                     def _stream():
                         for chunk in chunks:
                             yield chunk
@@ -1054,13 +1084,17 @@ if user_reply:
 
         elif action == "stop":
             st.session_state[stop_key] = True
-            note = "Understood — I'll pause here. Let me know if you need anything else."
+            note = (
+                "Understood — I'll pause here. Let me know if you need anything else."
+            )
             chat_history.append({"role": "assistant", "content": note})
             with st.chat_message("assistant"):
                 st.markdown(note)
 
         else:  # clarify
-            clarification = "Happy to help — let me know what you’d like me to clarify or adjust."
+            clarification = (
+                "Happy to help — let me know what you’d like me to clarify or adjust."
+            )
             chat_history.append({"role": "assistant", "content": clarification})
             with st.chat_message("assistant"):
                 st.markdown(clarification)
@@ -1080,7 +1114,9 @@ if "llm_out" in st.session_state:
         if st.session_state.get("openai_valid")
         else (
             "OpenAI (unvalidated)"
-            if (st.session_state.get("OPENAI_API_KEY_UI") or os.getenv("OPENAI_API_KEY"))
+            if (
+                st.session_state.get("OPENAI_API_KEY_UI") or os.getenv("OPENAI_API_KEY")
+            )
             else "Heuristic fallback (no key)"
         )
     )
@@ -1090,11 +1126,11 @@ if "llm_out" in st.session_state:
     st.code(out.get("title_edit", ""))
 
     st.markdown(f"**Proposed Bullets (up to {bullet_max})**")
-    for b in out.get("bullets_edits", [])[: bullet_max]:
-        st.write(f"• {re.sub(r'[.!?]+$','', b).strip()}")
+    for b in out.get("bullets_edits", [])[:bullet_max]:
+        st.write(f"• {re.sub(r'[.!?]+$', '', b).strip()}")
 
     st.markdown(f"**Proposed Description (<= {desc_max} chars)**")
-    st.code((out.get("description_edit", ""))[: desc_max])
+    st.code((out.get("description_edit", ""))[:desc_max])
 
     if out.get("rationales"):
         with st.expander("Why these edits?"):
@@ -1103,7 +1139,9 @@ if "llm_out" in st.session_state:
 
     st.caption(f"Source: {rules_source}")
 
-    approved = st.checkbox("I approve these edits and confirm they follow brand & Amazon rules")
+    approved = st.checkbox(
+        "I approve these edits and confirm they follow brand & Amazon rules"
+    )
     if approved:
         # Final Markdown summary
         final_md = []
@@ -1111,10 +1149,10 @@ if "llm_out" in st.session_state:
         final_md.append("\n## Title (proposed)\n")
         final_md.append(out.get("title_edit", ""))
         final_md.append("\n## Bullets (proposed)\n")
-        for b in out.get("bullets_edits", [])[: bullet_max]:
-            final_md.append(f"- {re.sub(r'[.!?]+$','', b).strip()}")
+        for b in out.get("bullets_edits", [])[:bullet_max]:
+            final_md.append(f"- {re.sub(r'[.!?]+$', '', b).strip()}")
         final_md.append("\n\n## Description (proposed)\n")
-        final_md.append((out.get("description_edit", ""))[: desc_max])
+        final_md.append((out.get("description_edit", ""))[:desc_max])
 
         final_md.append("\n\n## Rationale & Rule Compliance\n")
         final_md.append(
@@ -1140,37 +1178,43 @@ if "llm_out" in st.session_state:
         st.markdown("---")
         st.subheader("Final Markdown")
         st.code(final_md_str, language="markdown")
-        st.download_button("Download final.md", final_md_str.encode("utf-8"), file_name="final.md")
+        st.download_button(
+            "Download final.md", final_md_str.encode("utf-8"), file_name="final.md"
+        )
 
         with st.expander("Email draft to stakeholders"):
             email_md = f"""
-Subject: Approved PDP Edits for SKU {client_data['sku']}
+Subject: Approved PDP Edits for SKU {client_data["sku"]}
 
 Hi team,
 
-Please find the approved PDP content updates for SKU {client_data['sku']} below. These adhere to the style guide (title≤{title_max}, ≤{bullet_max} bullets, description≤{desc_max}; no promo/seller info when restricted).
+Please find the approved PDP content updates for SKU {client_data["sku"]} below. These adhere to the style guide (title≤{title_max}, ≤{bullet_max} bullets, description≤{desc_max}; no promo/seller info when restricted).
 
 Title
 -----
-{out.get('title_edit','')}
+{out.get("title_edit", "")}
 
 Bullets
 -------
-{chr(10).join([f"- {re.sub(r'[.!?]+$','', b).strip()}" for b in out.get('bullets_edits', [])[: bullet_max]])}
+{chr(10).join([f"- {re.sub(r'[.!?]+$', '', b).strip()}" for b in out.get("bullets_edits", [])[:bullet_max]])}
 
 Description
 ----------
-{(out.get('description_edit',''))[: desc_max]}
+{(out.get("description_edit", ""))[:desc_max]}
 
 Rationale
 ---------
 - Alignment with style rules; improved specificity vs competitor
-{chr(10).join([f"- {r}" for r in out.get('rationales', [])])}
+{chr(10).join([f"- {r}" for r in out.get("rationales", [])])}
 
 Thanks,
 Ally (Competitor Content Intelligence)
 """.strip()
             st.code(email_md)
-            st.download_button("Download email.txt", email_md.encode("utf-8"), file_name="email.txt")
+            st.download_button(
+                "Download email.txt", email_md.encode("utf-8"), file_name="email.txt"
+            )
 else:
-    st.info("Use the chat above to ask for edits, choose another competitor, or wrap up the review.")
+    st.info(
+        "Use the chat above to ask for edits, choose another competitor, or wrap up the review."
+    )

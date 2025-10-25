@@ -1,4 +1,5 @@
 """LangChain runnable that loads SKU data and captures user selections."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -43,9 +44,7 @@ class _SKUExtractor:
         client_idx: int = state["client_row_index"]
 
         selection = st.session_state.get("selected_competitor")
-        matched_option = self._match_competitor_selection(
-            selection, competitor_options
-        )
+        matched_option = self._match_competitor_selection(selection, competitor_options)
         if matched_option is None:
             st.stop()
 
@@ -193,7 +192,9 @@ class _SKUExtractor:
             "sku_col": pick("sku_id", "asin", "sku", "id", "product_id"),
             "title_col": pick("title", "product_title"),
             "bullets_col": pick("bullets", "features", "key_features", "bullet_points"),
-            "desc_col": pick("description", "product_description", "desc", "description_filled"),
+            "desc_col": pick(
+                "description", "product_description", "desc", "description_filled"
+            ),
             "images_col": pick("image_urls", "images", "image", "image_url"),
             "brand_col": pick("brand", "brand_name", "retailer_brand_name"),
             "category_col": pick("category", "node", "retailer_category_node"),
@@ -219,17 +220,13 @@ class _SKUExtractor:
 
         working_df = df.copy()
 
-        working_df["_desc_len"] = (
-            working_df[desc_col].fillna("").astype(str).str.len()
-        )
+        working_df["_desc_len"] = working_df[desc_col].fillna("").astype(str).str.len()
         working_df["_bullet_len"] = (
             working_df[bullets_col].fillna("").astype(str).str.len()
         )
 
         if avg_rank_col and avg_rank_col in working_df.columns:
-            avg_rank_numeric = pd.to_numeric(
-                working_df[avg_rank_col], errors="coerce"
-            )
+            avg_rank_numeric = pd.to_numeric(working_df[avg_rank_col], errors="coerce")
         else:
             avg_rank_numeric = pd.Series(
                 float("nan"), index=working_df.index, dtype="float64"
@@ -275,8 +272,7 @@ class _SKUExtractor:
             sorted_df.groupby(sku_col, sort=False, group_keys=False).head(1).copy()
         )
         deduped = deduped.sort_values("_original_order", kind="mergesort").drop(
-            columns=
-            [
+            columns=[
                 "_desc_len",
                 "_bullet_len",
                 "_image_count",
@@ -341,9 +337,13 @@ class _SKUExtractor:
         labels = [record["title_label"] for record in option_records]
         selectbox_kwargs: Dict[str, Any] = {}
         if default_index is None:
-            selectbox_kwargs.update({"index": None, "placeholder": "Choose a client product"})
+            selectbox_kwargs.update(
+                {"index": None, "placeholder": "Choose a client product"}
+            )
         else:
-            selectbox_kwargs["index"] = min(default_index, len(labels) - 1) if labels else 0
+            selectbox_kwargs["index"] = (
+                min(default_index, len(labels) - 1) if labels else 0
+            )
 
         selected_title = st.sidebar.selectbox(
             prompt,
@@ -434,10 +434,16 @@ class _SKUExtractor:
                 return option
         return None
 
-    def _record_from_row(self, row: pd.DataFrame, column_map: Dict[str, str]) -> Dict[str, Any]:
-        sku_display = row.iloc[0]["_display_sku"] if "_display_sku" in row.columns else ""
+    def _record_from_row(
+        self, row: pd.DataFrame, column_map: Dict[str, str]
+    ) -> Dict[str, Any]:
+        sku_display = (
+            row.iloc[0]["_display_sku"] if "_display_sku" in row.columns else ""
+        )
         sku_original_series = row[column_map["sku_col"]].astype(str)
-        sku_original = sku_original_series.iloc[0] if not sku_original_series.empty else ""
+        sku_original = (
+            sku_original_series.iloc[0] if not sku_original_series.empty else ""
+        )
         record = {
             "sku": sku_display,
             "sku_original": sku_original,

@@ -1,4 +1,5 @@
 """LangGraph orchestration for the product validation workflow."""
+
 from __future__ import annotations
 
 from typing import Any, Callable, Dict, TypedDict
@@ -18,7 +19,7 @@ class ProductValidationState(TypedDict, total=False):
 
 
 def build_product_validation_graph(
-    validation_fn: Callable[[SKUData, RuleExtraction], Dict[str, Any]]
+    validation_fn: Callable[[SKUData, RuleExtraction], Dict[str, Any]],
 ):
     sku_chain = create_sku_extractor()
     rule_chain = create_rule_extractor()

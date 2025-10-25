@@ -1,4 +1,5 @@
-"""Review interaction orchestrator for the issues/edits flow."""
+"""Review assistant module orchestrating the issues/edits flow."""
+
 from __future__ import annotations
 
 import json
