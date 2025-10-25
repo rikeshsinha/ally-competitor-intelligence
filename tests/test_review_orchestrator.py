@@ -63,9 +63,17 @@ def test_heuristic_stop():
     assert action == "stop"
 
 
-def test_heuristic_clarify_for_question():
+def test_heuristic_answer_question_for_question():
     action = classify_review_followup("summary", "What else do you need?")
-    assert action == "clarify"
+    assert action == "answer_question"
+
+
+def test_heuristic_answer_question_for_rule_request():
+    action = classify_review_followup(
+        "summary",
+        "Please share the bullet rules again.",
+    )
+    assert action == "answer_question"
 
 
 def test_llm_result_overrides_heuristic():
@@ -73,6 +81,13 @@ def test_llm_result_overrides_heuristic():
     client = _DummyClient(payload)
     action = classify_review_followup("summary", "Maybe", client=client)
     assert action == "select_competitor"
+
+
+def test_llm_answer_question_override():
+    payload = json.dumps({"action": "clarify"})
+    client = _DummyClient(payload)
+    action = classify_review_followup("summary", "What are the rules?", client=client)
+    assert action == "answer_question"
 
 
 def test_llm_failure_falls_back_to_heuristics():
@@ -86,3 +101,13 @@ def test_llm_invalid_action_uses_heuristic():
     client = _DummyClient(payload)
     action = classify_review_followup("summary", "Yes, please", client=client)
     assert action == "generate_edits"
+
+
+def test_llm_failure_falls_back_to_answer_question():
+    client = _DummyClient("{}", raises=True)
+    action = classify_review_followup(
+        "summary",
+        "What is the bullet limit?",
+        client=client,
+    )
+    assert action == "answer_question"
