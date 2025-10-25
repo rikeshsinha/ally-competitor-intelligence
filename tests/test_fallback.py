@@ -66,7 +66,7 @@ sys.modules.setdefault("graph.product_validation", graph_product_module)
 import app
 
 
-def _call_fallback(client_data):
+def _call_fallback(client_data, user_context: str | None = None):
     """Invoke call_llm with fallback path forced."""
     # Ensure fallback path by forcing get_openai_client to return None
     original_get_client = app.get_openai_client
@@ -80,6 +80,7 @@ def _call_fallback(client_data):
                 "bullets": {"max_count": 5},
                 "description": {"max_chars": 400},
             },
+            user_context=user_context,
         )
     finally:
         app.get_openai_client = original_get_client  # type: ignore
@@ -159,3 +160,30 @@ def test_fallback_empty_inputs_return_no_new_claims():
 
     assert response["bullets_edits"] == []
     assert response["description_edit"] == ""
+
+
+def test_fallback_context_appends_guidance_block():
+    client_data = {
+        "brand": "Acme Pets",
+        "title": "Pet Harness",
+        "bullets": "",
+        "description": "",
+    }
+    guidance = "Emphasize ease of use and comfort."
+    response = _call_fallback(client_data, user_context=guidance)
+
+    assert "user_guidance" in response
+    assert response["user_guidance"].startswith("USER GUIDANCE:\n")
+    assert guidance in response["user_guidance"]
+
+
+def test_fallback_context_absent_by_default():
+    client_data = {
+        "brand": "Acme Pets",
+        "title": "Pet Harness",
+        "bullets": "",
+        "description": "",
+    }
+    response = _call_fallback(client_data)
+
+    assert "user_guidance" not in response
