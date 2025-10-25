@@ -115,6 +115,20 @@ class _SKUExtractor:
         client_data = self._record_from_row(client_row, column_map)
         comp_data = self._record_from_row(comp_row, column_map)
 
+        additional_products: List[Dict[str, Any]] = []
+        competitor_choices = st.session_state.get("competitor_choices")
+        if isinstance(competitor_choices, dict):
+            options = competitor_choices.get("options", [])
+            if isinstance(options, list):
+                selected_brand = str(matched_option.get("brand", ""))
+                for option in options:
+                    if not isinstance(option, dict):
+                        continue
+                    if str(option.get("brand", "")) == selected_brand:
+                        continue
+                    additional_products.append(option.copy())
+        st.session_state["orchestrator_additional_products"] = additional_products
+
         st.session_state[self._STATE_KEY] = state
 
         return SKUData(

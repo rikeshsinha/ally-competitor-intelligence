@@ -1206,6 +1206,7 @@ if user_reply:
             st.session_state.get("issues_gaps_message", issues_gaps_message),
             user_reply,
             client=client,
+            additional_products=st.session_state.get("orchestrator_additional_products"),
         )
         st.session_state["issues_gaps_last_action"] = action
 

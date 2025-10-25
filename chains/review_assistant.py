@@ -175,6 +175,7 @@ def classify_review_followup(
     user_input: str,
     *,
     client: Optional[Any] = None,
+    additional_products: Optional[Any] = None,
 ) -> Action:
     """Classify how the review flow should proceed based on the user's reply."""
 
@@ -182,20 +183,21 @@ def classify_review_followup(
 
     if client is not None:
         try:
+            payload: Dict[str, Any] = {
+                "issues_summary": summary or "",
+                "user_input": user_input or "",
+                "tools": _TOOL_METADATA,
+            }
+            if additional_products is not None:
+                payload["additional_products"] = additional_products
+
             response = client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=[
                     {"role": "system", "content": _LLM_SYSTEM_PROMPT},
                     {
                         "role": "user",
-                        "content": json.dumps(
-                            {
-                                "issues_summary": summary or "",
-                                "user_input": user_input or "",
-                                "tools": _TOOL_METADATA,
-                            },
-                            ensure_ascii=False,
-                        ),
+                        "content": json.dumps(payload, ensure_ascii=False),
                     },
                 ],
                 response_format={"type": "json_object"},
