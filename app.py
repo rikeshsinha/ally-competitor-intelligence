@@ -54,7 +54,11 @@ from core.content_rules import (
 from graph.product_validation import build_product_validation_graph
 from chains.rule_extractor import RuleExtraction
 from chains.review_assistant import classify_review_followup
-from chains.sku_extractor import prime_competitor_chat_state
+from chains.sku_extractor import (
+    COMPETITOR_SELECTION_SESSION_KEYS,
+    CLIENT_SELECTION_SESSION_KEYS,
+    prime_competitor_chat_state,
+)
 
 # Optional OpenAI SDK (gracefully handle if not installed or no key)
 try:
@@ -196,9 +200,200 @@ def _get_option_for_selection(
         if (
             option.get("row_index") == target_row
             and option.get("brand") == target_brand
-        ):
-            return option
+            ):
+                return option
     return None
+
+
+_CLIENT_SELECTION_RESET_KEYS = tuple(
+    key
+    for key in CLIENT_SELECTION_SESSION_KEYS
+    if key not in {"client_chat_rendered_version"}
+)
+
+
+def _clear_client_selection_state(
+    *, keep_choices: bool = True, reset_version: bool = False, clear_widget_keys: bool = False
+) -> None:
+    product_key = st.session_state.pop("client_product_select_key", None)
+    if product_key:
+        st.session_state.pop(product_key, None)
+    for key in _CLIENT_SELECTION_RESET_KEYS:
+        st.session_state.pop(key, None)
+    if reset_version:
+        st.session_state.pop("client_chat_rendered_version", None)
+    if not keep_choices:
+        st.session_state.pop("client_choices", None)
+    if clear_widget_keys:
+        for key in list(st.session_state.keys()):
+            if key.startswith("client_brand_select_") or key.startswith(
+                "client_product_select_"
+            ):
+                st.session_state.pop(key, None)
+
+
+def _clear_competitor_selection_state() -> None:
+    product_key = st.session_state.pop("competitor_product_select_key", None)
+    if product_key:
+        st.session_state.pop(product_key, None)
+    for key in COMPETITOR_SELECTION_SESSION_KEYS:
+        st.session_state.pop(key, None)
+    for key in list(st.session_state.keys()):
+        if key.startswith("competitor_brand_select_") or key.startswith(
+            "competitor_product_select_"
+        ):
+            st.session_state.pop(key, None)
+
+
+def _render_client_selection_ui() -> Optional[Dict[str, Any]]:
+    choices = st.session_state.get("client_choices")
+    if not isinstance(choices, dict):
+        return st.session_state.get("selected_client")
+
+    brand_groups: List[Dict[str, Any]] = choices.get("brand_groups") or []
+    if not brand_groups:
+        return st.session_state.get("selected_client")
+
+    version = choices.get("version")
+    if version and st.session_state.get("client_chat_rendered_version") != version:
+        _clear_client_selection_state(reset_version=True, clear_widget_keys=True)
+        _clear_competitor_selection_state()
+        st.session_state["client_chat_rendered_version"] = version
+
+    previous_selection = st.session_state.get("selected_client")
+    previous_brand = st.session_state.get("selected_client_brand")
+
+    brand_groups_with_placeholder: List[Optional[Dict[str, Any]]] = [None]
+    brand_groups_with_placeholder.extend(brand_groups)
+    brand_select_key = f"client_brand_select_{version or 'default'}"
+    current_brand_record = _get_brand_record(
+        brand_groups, st.session_state.get("selected_client_brand")
+    )
+    brand_index = 0
+    if current_brand_record and current_brand_record in brand_groups_with_placeholder:
+        brand_index = brand_groups_with_placeholder.index(current_brand_record)
+
+    with st.chat_message("assistant"):
+        st.markdown("Let's pick the client brand you'd like to optimize:")
+        selected_brand_option = st.selectbox(
+            "Select a client brand",
+            options=brand_groups_with_placeholder,
+            index=brand_index,
+            format_func=_format_brand_dropdown_label,
+            key=brand_select_key,
+            label_visibility="collapsed",
+        )
+
+    if selected_brand_option is None:
+        if previous_brand is not None or previous_selection is not None:
+            _clear_client_selection_state(keep_choices=True)
+    else:
+        brand_name = str(selected_brand_option.get("brand", "")).strip()
+        if not brand_name:
+            if previous_brand is not None or previous_selection is not None:
+                _clear_client_selection_state(keep_choices=True)
+        elif previous_brand != brand_name:
+            _clear_client_selection_state(keep_choices=True)
+            st.session_state["selected_client_brand"] = brand_name
+        else:
+            st.session_state["selected_client_brand"] = brand_name
+
+    brand_name = st.session_state.get("selected_client_brand")
+    if brand_name:
+        st.session_state["client_brand_user_ack"] = brand_name
+    else:
+        st.session_state.pop("client_brand_user_ack", None)
+
+    brand_ack = st.session_state.get("client_brand_user_ack")
+    if brand_ack:
+        with st.chat_message("user"):
+            st.markdown(f"Let's optimize **{brand_ack}**.")
+
+    brand_record = _get_brand_record(brand_groups, brand_name)
+    selected_product_option: Optional[Dict[str, Any]] = None
+
+    if brand_record:
+        product_options = brand_record.get("options") or []
+        matched_option = _get_option_for_selection(
+            st.session_state.get("selected_client"), product_options
+        )
+        product_options_with_placeholder: List[Optional[Dict[str, Any]]] = [None]
+        product_options_with_placeholder.extend(product_options)
+        product_index = 0
+        if matched_option and matched_option in product_options_with_placeholder:
+            product_index = product_options_with_placeholder.index(matched_option)
+        product_key = (
+            f"client_product_select_{version or 'default'}_{brand_record.get('brand')}"
+        )
+        st.session_state["client_product_select_key"] = product_key
+
+        with st.chat_message("assistant"):
+            st.markdown(
+                f"Now pick the client product from **{brand_record.get('brand', 'this brand')}** to optimize:"
+            )
+            selected_product_option = st.selectbox(
+                "Select a client product",
+                options=product_options_with_placeholder,
+                index=product_index,
+                format_func=_format_product_dropdown_label,
+                key=product_key,
+                label_visibility="collapsed",
+            )
+
+    if selected_product_option is None:
+        st.session_state.pop("client_product_user_ack", None)
+        st.session_state.pop("client_chat_confirmed", None)
+        if st.session_state.get("selected_client") is not None:
+            st.session_state.pop("selected_client", None)
+    else:
+        selection_record = {
+            "brand": str(selected_product_option.get("brand", "")).strip(),
+            "row_index": selected_product_option.get("row_index"),
+            "label": str(
+                selected_product_option.get("title_label")
+                or selected_product_option.get("title_value")
+                or ""
+            ).strip(),
+            "ordinal": selected_product_option.get("ordinal")
+            or selected_product_option.get("brand_option_ordinal"),
+        }
+        st.session_state["selected_client"] = selection_record
+        st.session_state["client_chat_confirmed"] = True
+        label = selection_record.get("label")
+        brand_for_ack = selection_record.get("brand", "") or ""
+        if brand_for_ack:
+            brand_for_ack = str(brand_for_ack).strip()
+        if label and brand_for_ack:
+            ack_text = f"{brand_for_ack} — {label}"
+        elif label:
+            ack_text = label
+        else:
+            ack_text = brand_for_ack
+        st.session_state["client_product_user_ack"] = ack_text
+
+    product_ack = st.session_state.get("client_product_user_ack")
+    if product_ack:
+        with st.chat_message("user"):
+            st.markdown(f"Focus on **{product_ack}**.")
+
+    final_selection = st.session_state.get("selected_client")
+    if final_selection and st.session_state.get("client_chat_confirmed"):
+        brand_label = final_selection.get("brand") or "your selected brand"
+        product_label = final_selection.get("label")
+        if product_label:
+            confirmation_text = (
+                f"Great! We'll optimize **{brand_label} — {product_label}**."
+            )
+        else:
+            confirmation_text = f"Great! We'll optimize **{brand_label}**."
+        with st.chat_message("assistant"):
+            st.markdown(confirmation_text)
+
+    if previous_selection != final_selection:
+        _clear_competitor_selection_state()
+        _trigger_rerun()
+
+    return final_selection
 
 
 def _render_competitor_selection_ui() -> Optional[Dict[str, Any]]:
@@ -742,6 +937,13 @@ if csv_file is None and "uploaded_df" not in st.session_state:
     st.stop()
 
 prime_competitor_chat_state(csv_file)
+_render_client_selection_ui()
+
+if st.session_state.get("client_choices") and not st.session_state.get(
+    "selected_client"
+):
+    st.stop()
+
 _render_competitor_selection_ui()
 
 if st.session_state.get("competitor_choices") and not st.session_state.get(
