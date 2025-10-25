@@ -777,6 +777,11 @@ if not issues_gaps_sections:
 issues_gaps_message = "\n\n".join(issues_gaps_sections)
 issues_gaps_message += "\n\nReady for me to draft compliant edits based on this review? (Yes/No)"
 
+if issues_gaps_version != stored_issues_gaps_version:
+    st.session_state.pop("issues_gaps_decision", None)
+    st.session_state.pop("issues_gaps_decision_version", None)
+    st.session_state.pop("llm_out", None)
+
 if (
     issues_gaps_version != stored_issues_gaps_version
     or st.session_state.get("issues_gaps_message") is None
@@ -789,89 +794,135 @@ if stored_message:
     with st.chat_message("assistant"):
         st.markdown(stored_message)
 
-st.divider()
+decision_key = "issues_gaps_decision"
+decision_version_key = "issues_gaps_decision_version"
+decision = (
+    st.session_state.get(decision_key)
+    if st.session_state.get(decision_version_key) == issues_gaps_version
+    else None
+)
 
-st.subheader("Generate suggested edits")
+if decision == "yes":
+    with st.chat_message("user"):
+        st.markdown("Yes, let's draft compliant edits based on these findings.")
+    if st.button("Hold off for now", key="issues_gaps_change_to_no"):
+        st.session_state[decision_key] = "no"
+        st.session_state[decision_version_key] = issues_gaps_version
+        st.experimental_rerun()
+elif decision == "no":
+    with st.chat_message("user"):
+        st.markdown("Not yet — I need to review or adjust before drafting edits.")
+    change_cols = st.columns(2)
+    if change_cols[0].button("I'm ready to draft edits now", key="issues_gaps_ready_yes"):
+        st.session_state[decision_key] = "yes"
+        st.session_state[decision_version_key] = issues_gaps_version
+        st.experimental_rerun()
+    if change_cols[1].button("Reset decision", key="issues_gaps_reset_decision"):
+        st.session_state.pop(decision_key, None)
+        st.session_state.pop(decision_version_key, None)
+        st.experimental_rerun()
+else:
+    st.caption("Would you like me to draft compliant edits based on this review?")
+    action_cols = st.columns(2)
+    if action_cols[0].button("Yes – draft compliant edits", key="issues_gaps_yes"):
+        st.session_state[decision_key] = "yes"
+        st.session_state[decision_version_key] = issues_gaps_version
+        st.experimental_rerun()
+    if action_cols[1].button("Not yet", key="issues_gaps_no"):
+        st.session_state[decision_key] = "no"
+        st.session_state[decision_version_key] = issues_gaps_version
+        st.experimental_rerun()
 
-# LLM mode indicator
-_mode = "OpenAI (validated)" if st.session_state.get("openai_valid") else ("OpenAI (unvalidated)" if (st.session_state.get("OPENAI_API_KEY_UI") or os.getenv("OPENAI_API_KEY")) else "Heuristic fallback (no key)")
-st.caption(f"Mode: {_mode}")
-if st.button("Draft compliant edits with LLM / heuristic"):
-    with st.spinner("Generating suggestions..."):
-        llm_out = call_llm(client_data, comp_data, current_rules)
-    st.session_state["llm_out"] = llm_out
-    if llm_out.get("_llm"):
-        st.success("Used OpenAI LLM")
-    else:
-        if not st.session_state.get("openai_valid"):
-            st.warning("No/invalid OpenAI key → used heuristic fallback")
+decision = (
+    st.session_state.get(decision_key)
+    if st.session_state.get(decision_version_key) == issues_gaps_version
+    else None
+)
+
+if decision == "yes":
+    st.divider()
+
+    st.subheader("Generate suggested edits")
+
+    # LLM mode indicator
+    _mode = "OpenAI (validated)" if st.session_state.get("openai_valid") else ("OpenAI (unvalidated)" if (st.session_state.get("OPENAI_API_KEY_UI") or os.getenv("OPENAI_API_KEY")) else "Heuristic fallback (no key)")
+    st.caption(f"Mode: {_mode}")
+    if st.button("Draft compliant edits with LLM / heuristic"):
+        with st.spinner("Generating suggestions..."):
+            llm_out = call_llm(client_data, comp_data, current_rules)
+        st.session_state["llm_out"] = llm_out
+        if llm_out.get("_llm"):
+            st.success("Used OpenAI LLM")
         else:
-            st.warning("LLM call failed → used heuristic fallback")
+            if not st.session_state.get("openai_valid"):
+                st.warning("No/invalid OpenAI key → used heuristic fallback")
+            else:
+                st.warning("LLM call failed → used heuristic fallback")
 
-if "llm_out" in st.session_state:
-    out = st.session_state["llm_out"]
-    rules = current_rules
-    title_max = rules["title"]["max_chars"]
-    bullet_max = rules["bullets"]["max_count"]
-    desc_max = rules["description"]["max_chars"]
-    st.markdown("**Proposed Title**")
-    st.code(out.get("title_edit", ""))
+    if "llm_out" in st.session_state:
+        out = st.session_state["llm_out"]
+        rules = current_rules
+        title_max = rules["title"]["max_chars"]
+        bullet_max = rules["bullets"]["max_count"]
+        desc_max = rules["description"]["max_chars"]
+        st.markdown("**Proposed Title**")
+        st.code(out.get("title_edit", ""))
 
-    st.markdown(f"**Proposed Bullets (up to {bullet_max})**")
-    for b in out.get("bullets_edits", [])[: bullet_max]:
-        st.write(f"• {re.sub(r'[.!?]+$', '', b).strip()}")
-
-    st.markdown(f"**Proposed Description (<= {desc_max} chars)**")
-    st.code((out.get("description_edit", ""))[: desc_max])
-
-    if out.get("rationales"):
-        with st.expander("Why these edits?"):
-            for r in out["rationales"]:
-                st.write("- ", r)
-
-    st.caption(f"Source: {rules_source}")
-
-    approved = st.checkbox("I approve these edits and confirm they follow brand & Amazon rules")
-    if approved:
-        # Final Markdown summary
-        final_md = []
-        final_md.append(f"# Final Content — Client SKU {client_data['sku']}")
-        final_md.append("\n## Title (proposed)\n")
-        final_md.append(out.get("title_edit", ""))
-        final_md.append("\n## Bullets (proposed)\n")
+        st.markdown(f"**Proposed Bullets (up to {bullet_max})**")
         for b in out.get("bullets_edits", [])[: bullet_max]:
-            final_md.append(f"- {re.sub(r'[.!?]+$','', b).strip()}")
-        final_md.append("\n\n## Description (proposed)\n")
-        final_md.append((out.get("description_edit", ""))[: desc_max])
+            st.write(f"• {re.sub(r'[.!?]+$','', b).strip()}")
 
-        final_md.append("\n\n## Rationale & Rule Compliance\n")
-        final_md.append(
-            f"- Title ≤ {title_max} chars; "
-            f"{'brand required' if rules['title']['brand_required'] else 'brand optional'}; "
-            f"{'avoid ALL CAPS' if rules['title']['no_all_caps'] else 'ALL CAPS allowed'}; "
-            f"{'no promo language' if rules['title']['no_promo'] else 'promo allowed'}"
-        )
-        final_md.append(
-            f"- Up to {bullet_max} bullets; {'start with capitals' if rules['bullets']['start_capital'] else 'any case allowed'}; "
-            f"{'no ending punctuation' if rules['bullets']['no_end_punct'] else 'ending punctuation allowed'}; "
-            f"{'no promo/seller info' if rules['bullets']['no_promo_or_seller_info'] else 'promo allowed'}"
-        )
-        final_md.append(
-            f"- Description ≤ {desc_max} chars; "
-            f"{'no promo language' if rules['description']['no_promo'] else 'promo allowed'}; "
-            f"{'avoid ALL CAPS' if rules['description']['sentence_caps'] else 'ALL CAPS allowed'}"
-        )
-        for r in out.get("rationales", []):
-            final_md.append(f"- {r}")
+        st.markdown(f"**Proposed Description (<= {desc_max} chars)**")
+        st.code((out.get("description_edit", ""))[: desc_max])
 
-        final_md_str = "\n".join(final_md).strip()
-        st.markdown("---")
-        st.subheader("Final Markdown")
-        st.code(final_md_str, language="markdown")
-        st.download_button("Download final.md", final_md_str.encode("utf-8"), file_name="final.md")
+        if out.get("rationales"):
+            with st.expander("Why these edits?"):
+                for r in out["rationales"]:
+                    st.write("- ", r)
 
-        with st.expander("Email draft to stakeholders"):
-            email_md = f"""
+        st.caption(f"Source: {rules_source}")
+
+        approved = st.checkbox("I approve these edits and confirm they follow brand & Amazon rules")
+        if approved:
+            # Final Markdown summary
+            final_md = []
+            final_md.append(f"# Final Content — Client SKU {client_data['sku']}")
+            final_md.append("\n## Title (proposed)\n")
+            final_md.append(out.get("title_edit", ""))
+            final_md.append("\n## Bullets (proposed)\n")
+            for b in out.get("bullets_edits", [])[: bullet_max]:
+                final_md.append(f"- {re.sub(r'[.!?]+$','', b).strip()}")
+            final_md.append("\n\n## Description (proposed)\n")
+            final_md.append((out.get("description_edit", ""))[: desc_max])
+
+            final_md.append("\n\n## Rationale & Rule Compliance\n")
+            final_md.append(
+                f"- Title ≤ {title_max} chars; "
+                f"{'brand required' if rules['title']['brand_required'] else 'brand optional'}; "
+                f"{'avoid ALL CAPS' if rules['title']['no_all_caps'] else 'ALL CAPS allowed'}; "
+                f"{'no promo language' if rules['title']['no_promo'] else 'promo allowed'}"
+            )
+            final_md.append(
+                f"- Up to {bullet_max} bullets; {'start with capitals' if rules['bullets']['start_capital'] else 'any case allowed'}; "
+                f"{'no ending punctuation' if rules['bullets']['no_end_punct'] else 'ending punctuation allowed'}; "
+                f"{'no promo/seller info' if rules['bullets']['no_promo_or_seller_info'] else 'promo allowed'}"
+            )
+            final_md.append(
+                f"- Description ≤ {desc_max} chars; "
+                f"{'no promo language' if rules['description']['no_promo'] else 'promo allowed'}; "
+                f"{'avoid ALL CAPS' if rules['description']['sentence_caps'] else 'ALL CAPS allowed'}"
+            )
+            for r in out.get("rationales", []):
+                final_md.append(f"- {r}")
+
+            final_md_str = "\n".join(final_md).strip()
+            st.markdown("---")
+            st.subheader("Final Markdown")
+            st.code(final_md_str, language="markdown")
+            st.download_button("Download final.md", final_md_str.encode("utf-8"), file_name="final.md")
+
+            with st.expander("Email draft to stakeholders"):
+                email_md = f"""
 Subject: Approved PDP Edits for SKU {client_data['sku']}
 
 Hi team,
@@ -898,8 +949,14 @@ Rationale
 Thanks,
 Ally (Competitor Content Intelligence)
 """.strip()
-            st.code(email_md)
-            st.download_button("Download email.txt", email_md.encode("utf-8"), file_name="email.txt")
+                st.code(email_md)
+                st.download_button("Download email.txt", email_md.encode("utf-8"), file_name="email.txt")
 
+    else:
+        st.info("Click the button above to generate suggested edits.")
 else:
-    st.info("Click the button above to generate suggested edits.")
+    st.divider()
+    if decision == "no":
+        st.info("Adjust the selections above or click ‘I'm ready to draft edits now’ when you're prepared for suggestions.")
+    else:
+        st.info("Review the issues summary and choose Yes or Not yet to continue to the suggestion step.")
