@@ -533,19 +533,15 @@ _ui_key = st.sidebar.text_input("OpenAI API Key", type="password", value=st.sess
 if _ui_key != st.session_state.get("OPENAI_API_KEY_UI"):
     st.session_state["OPENAI_API_KEY_UI"] = _ui_key
 
-# Automatically validate when a key is available or changes
-active_key = _ui_key or os.getenv("OPENAI_API_KEY")
-last_validated_key = st.session_state.get("openai_last_validated_key")
-
-if active_key:
-    if active_key != last_validated_key:
-        with st.sidebar.spinner("Validating key..."):
-            _, _ = validate_openai_key()
-        st.session_state["openai_last_validated_key"] = active_key
-else:
-    st.session_state["openai_valid"] = None
-    st.session_state["openai_error"] = ""
-    st.session_state["openai_last_validated_key"] = None
+col_a, col_b = st.sidebar.columns([1,1])
+if col_a.button("Validate key"):
+    ok, err = validate_openai_key()
+    if ok:
+        st.sidebar.success("Key validated")
+    else:
+        st.sidebar.error("Invalid key")
+        if err:
+            st.sidebar.caption(err)
 
 # Status pill
 valid_flag = st.session_state.get("openai_valid")
@@ -555,9 +551,6 @@ elif (_ui_key or os.getenv("OPENAI_API_KEY")) and valid_flag is False:
     st.sidebar.markdown('<div style="display:inline-block;padding:4px 10px;border-radius:999px;background:#dc2626;color:#fff;font-weight:600">OpenAI: Invalid</div>', unsafe_allow_html=True)
 else:
     st.sidebar.markdown('<div style="display:inline-block;padding:4px 10px;border-radius:999px;background:#6b7280;color:#fff;font-weight:600">OpenAI: Not set</div>', unsafe_allow_html=True)
-
-if st.session_state.get("openai_error"):
-    st.sidebar.caption(st.session_state.get("openai_error"))
 
 # Sidebar: file inputs
 st.sidebar.header("Inputs")
