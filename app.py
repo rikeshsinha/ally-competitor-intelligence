@@ -39,6 +39,7 @@ import re
 import json
 import hashlib
 from typing import List, Dict, Any, Optional, Tuple
+import textwrap
 
 import pandas as pd
 import streamlit as st
@@ -481,6 +482,152 @@ def call_llm(
         }
 
 
+def _format_rules_for_answer(rules: Dict[str, Any]) -> str:
+    title_rules = rules.get("title", {})
+    bullet_rules = rules.get("bullets", {})
+    desc_rules = rules.get("description", {})
+    parts = ["Key rule constraints:"]
+    if title_rules:
+        parts.append(
+            f"- Title: ≤{title_rules.get('max_chars', 'n/a')} characters; case guidance: {title_rules.get('style', '—')}"
+        )
+    if bullet_rules:
+        parts.append(
+            f"- Bullets: up to {bullet_rules.get('max_count', 'n/a')} entries; max length ≈ {bullet_rules.get('max_chars', 'n/a')} each"
+        )
+    if desc_rules:
+        parts.append(
+            f"- Description: ≤{desc_rules.get('max_chars', 'n/a')} characters"
+        )
+    other_rules = [
+        key for key in rules.keys() if key not in {"title", "bullets", "description"}
+    ]
+    if other_rules:
+        parts.append(
+            "- Additional policies: "
+            + ", ".join(sorted(other_rules))
+        )
+    return "\n".join(parts)
+
+
+def _summarize_product(label: str, data: Dict[str, Any]) -> str:
+    bullets = [f"• {b}" for b in split_bullets(data.get("bullets", "")) if str(b).strip()]
+    details = [
+        f"Brand: {data.get('brand', '—')}",
+        f"SKU: {data.get('sku', data.get('sku_id', '—'))}",
+        f"Title: {data.get('title', '—')}",
+    ]
+    description = data.get("description")
+    if description:
+        details.append(f"Description: {description}")
+    if bullets:
+        details.append("Bullets:\n" + "\n".join(bullets))
+    avg_rank = data.get("avg_rank_search")
+    if avg_rank not in (None, "", "nan"):
+        details.append(f"Average search rank: {avg_rank}")
+    return f"{label} details:\n" + "\n".join(details)
+
+
+def _fallback_answer(
+    question: str,
+    *,
+    issues_summary: str,
+    rule_text: str,
+    client_text: str,
+    competitor_text: str,
+) -> str:
+    lower_q = question.lower()
+    sections: List[str] = []
+    if any(token in lower_q for token in ["rule", "guideline", "limit", "allow"]):
+        sections.append(rule_text)
+    if any(token in lower_q for token in ["client", "sku", "product", "title", "bullet", "description"]):
+        sections.append(client_text)
+    if any(token in lower_q for token in ["competitor", "compare", "gap", "issue"]):
+        sections.append(competitor_text)
+    if issues_summary and ("issue" in lower_q or "gap" in lower_q):
+        sections.append("Issues & gaps summary:\n" + issues_summary)
+    if not sections:
+        sections.extend(
+            [rule_text, client_text, competitor_text]
+        )
+    header = (
+        "I don't have model access right now, but here's what I can confirm from the uploaded materials:"
+    )
+    return header + "\n\n" + "\n\n".join(sections)
+
+
+def answer_review_question(
+    question: str,
+    *,
+    issues_summary: str,
+    current_rules: Dict[str, Any],
+    client_data: Dict[str, Any],
+    competitor_data: Dict[str, Any],
+    client: Optional[OpenAI] = None,
+) -> Tuple[str, List[str]]:
+    rule_text = _format_rules_for_answer(current_rules)
+    client_text = _summarize_product("Client SKU", client_data)
+    competitor_text = _summarize_product("Competitor SKU", competitor_data)
+
+    context_sections = [rule_text, client_text, competitor_text]
+    if issues_summary:
+        context_sections.append("Issues & gaps summary:\n" + issues_summary)
+    context_blob = "\n\n".join(context_sections)
+
+    answer_text = ""
+    if client is None:
+        client = get_openai_client()
+
+    if client is not None:
+        try:
+            response = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {
+                        "role": "system",
+                        "content": (
+                            "You are a retail content specialist. Use only the provided context to answer "
+                            "questions about rules, client SKU details, or competitor insights. Reference key "
+                            "constraints numerically when possible."
+                        ),
+                    },
+                    {
+                        "role": "user",
+                        "content": json.dumps(
+                            {
+                                "question": question,
+                                "context": context_blob,
+                            },
+                            ensure_ascii=False,
+                        ),
+                    },
+                ],
+                temperature=0,
+            )
+            answer_text = response.choices[0].message.content or ""
+        except Exception:
+            answer_text = ""
+
+    if not answer_text:
+        answer_text = _fallback_answer(
+            question,
+            issues_summary=issues_summary,
+            rule_text=rule_text,
+            client_text=client_text,
+            competitor_text=competitor_text,
+        )
+
+    normalized = textwrap.dedent(answer_text).strip()
+    if not normalized:
+        normalized = "I'm unable to find that information right now. Please review the uploaded summary above."
+
+    paragraphs = [p.strip() for p in normalized.split("\n\n") if p.strip()]
+    chunks = [p + "\n\n" for p in paragraphs]
+    if not chunks:
+        chunks = [normalized]
+    return normalized, chunks
+
+
 # ---------------------------
 # UI
 # ---------------------------
@@ -858,6 +1005,29 @@ if user_reply:
             chat_history.append({"role": "assistant", "content": followup})
             with st.chat_message("assistant"):
                 st.markdown(followup)
+
+        elif action == "answer_question":
+            answer_text, chunks = answer_review_question(
+                user_reply,
+                issues_summary=st.session_state.get(
+                    "issues_gaps_message", issues_gaps_message
+                ),
+                current_rules=current_rules,
+                client_data=client_data,
+                competitor_data=comp_data,
+                client=client,
+            )
+            chat_history.append({"role": "assistant", "content": answer_text})
+            with st.chat_message("assistant"):
+                writer = getattr(st, "write_stream", None)
+                if callable(writer):
+                    def _stream():
+                        for chunk in chunks:
+                            yield chunk
+
+                    writer(_stream())
+                else:
+                    st.markdown(answer_text)
 
         elif action == "select_competitor":
             note = "Sure — let's pick a different competitor. Resetting that step now."
