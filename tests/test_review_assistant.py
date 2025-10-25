@@ -6,7 +6,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from chains.review_orchestrator import classify_review_followup
+from chains.review_assistant import classify_review_followup
 
 
 class _DummyCompletions:
@@ -54,7 +54,9 @@ def test_heuristic_generate_edits():
 
 
 def test_heuristic_select_competitor():
-    action = classify_review_followup("summary", "Let's pick a different competitor brand.")
+    action = classify_review_followup(
+        "summary", "Let's pick a different competitor brand."
+    )
     assert action == "select_competitor"
 
 

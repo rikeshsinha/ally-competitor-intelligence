@@ -134,8 +134,12 @@ def _extract_text_from_pdf(pdf_bytes: bytes) -> Tuple[str, List[str]]:
             if not docs:
                 errors.append("No text extracted from PDF")
             else:
-                splitter = RecursiveCharacterTextSplitter(chunk_size=1800, chunk_overlap=200)
-                combined = "\n\n".join(doc.page_content for doc in docs if doc.page_content)
+                splitter = RecursiveCharacterTextSplitter(
+                    chunk_size=1800, chunk_overlap=200
+                )
+                combined = "\n\n".join(
+                    doc.page_content for doc in docs if doc.page_content
+                )
                 if combined.strip():
                     chunks = splitter.split_text(combined)
                     context = "\n\n".join(chunks[:5])
@@ -174,11 +178,16 @@ def _extract_text_from_pdf(pdf_bytes: bytes) -> Tuple[str, List[str]]:
             return "", errors
 
         if RecursiveCharacterTextSplitter is not None:
-            splitter = RecursiveCharacterTextSplitter(chunk_size=1800, chunk_overlap=200)
+            splitter = RecursiveCharacterTextSplitter(
+                chunk_size=1800, chunk_overlap=200
+            )
             chunks = splitter.split_text(combined)
         else:
             chunk_size = 1800
-            chunks = [combined[i : i + chunk_size] for i in range(0, len(combined), chunk_size)]
+            chunks = [
+                combined[i : i + chunk_size]
+                for i in range(0, len(combined), chunk_size)
+            ]
 
         context = "\n\n".join(chunks[:5])
         return context, errors
@@ -208,7 +217,9 @@ def _coerce_int(value: Any, default: int) -> int:
         return default
 
 
-def _merge_rules(default_rules: Dict[str, Any], candidate: Dict[str, Any]) -> Dict[str, Any]:
+def _merge_rules(
+    default_rules: Dict[str, Any], candidate: Dict[str, Any]
+) -> Dict[str, Any]:
     merged = copy.deepcopy(default_rules)
     for section, defaults in default_rules.items():
         cand_section = candidate.get(section)
@@ -216,7 +227,9 @@ def _merge_rules(default_rules: Dict[str, Any], candidate: Dict[str, Any]) -> Di
             continue
         for key, default_value in defaults.items():
             if isinstance(default_value, bool):
-                merged[section][key] = _coerce_bool(cand_section.get(key), default_value)
+                merged[section][key] = _coerce_bool(
+                    cand_section.get(key), default_value
+                )
             elif isinstance(default_value, int):
                 merged[section][key] = _coerce_int(cand_section.get(key), default_value)
             else:
@@ -250,8 +263,14 @@ def extract_rules_config(
         response = llm_client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
-                {"role": "system", "content": "You convert style guides into machine-readable JSON."},
-                {"role": "user", "content": f"{RULE_PROMPT}\n\nGuide excerpt:\n{context}"},
+                {
+                    "role": "system",
+                    "content": "You convert style guides into machine-readable JSON.",
+                },
+                {
+                    "role": "user",
+                    "content": f"{RULE_PROMPT}\n\nGuide excerpt:\n{context}",
+                },
             ],
             response_format={"type": "json_object"},
             temperature=0.1,
@@ -283,7 +302,9 @@ class _RuleExtractorRunnable:
     def __call__(self, inputs: Dict[str, Any]) -> RuleExtraction:  # type: ignore[override]
         rules_file = inputs.get("rules_file") if isinstance(inputs, dict) else None
         llm_client = self._get_llm_client()
-        rules, messages = extract_rules_config(rules_file, llm_client, self._default_rules)
+        rules, messages = extract_rules_config(
+            rules_file, llm_client, self._default_rules
+        )
 
         # Determine the rules provenance for downstream display.
         using_defaults = rules == self._default_rules
@@ -304,7 +325,9 @@ class _RuleExtractorRunnable:
 
         api_key: Optional[str] = None
         if st is not None:
-            api_key = st.session_state.get("OPENAI_API_KEY_UI") or os.getenv("OPENAI_API_KEY")
+            api_key = st.session_state.get("OPENAI_API_KEY_UI") or os.getenv(
+                "OPENAI_API_KEY"
+            )
         else:
             api_key = os.getenv("OPENAI_API_KEY")
 

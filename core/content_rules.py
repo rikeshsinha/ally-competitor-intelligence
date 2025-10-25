@@ -1,4 +1,5 @@
 """Reusable content validation helpers and rule definitions."""
+
 from __future__ import annotations
 
 import ast
@@ -108,7 +109,7 @@ def _extract_urls_from_text(text: str) -> List[str]:
     return [
         p
         for p in pieces
-        if p and p.lower().endswith((".jpg", ".jpeg", ".png", ".webp",".res"))
+        if p and p.lower().endswith((".jpg", ".jpeg", ".png", ".webp", ".res"))
     ]
 
 
@@ -173,7 +174,9 @@ def enforce_title_caps(text: str) -> str:
     return " ".join(fixed)
 
 
-def rule_check_title(title: str, brand: str, rules: Dict[str, Any], is_bundle: bool = False) -> Tuple[int, List[str]]:
+def rule_check_title(
+    title: str, brand: str, rules: Dict[str, Any], is_bundle: bool = False
+) -> Tuple[int, List[str]]:
     score = 100
     issues: List[str] = []
     if not isinstance(title, str) or not title.strip():
@@ -193,12 +196,16 @@ def rule_check_title(title: str, brand: str, rules: Dict[str, Any], is_bundle: b
         issues.append("Avoid ALL CAPS in title")
         score -= 10
     if not is_bundle and re.search(r"pack of\s*\d+", t, re.I):
-        issues.append("'(pack of X)' should only be used for bundles; verify correctness")
+        issues.append(
+            "'(pack of X)' should only be used for bundles; verify correctness"
+        )
         score -= 5
     return max(score, 0), issues
 
 
-def rule_check_bullets(bullets: List[str], rules: Dict[str, Any]) -> Tuple[int, List[str]]:
+def rule_check_bullets(
+    bullets: List[str], rules: Dict[str, Any]
+) -> Tuple[int, List[str]]:
     score = 100
     issues: List[str] = []
     if not bullets:
@@ -228,7 +235,9 @@ def rule_check_description(desc: str, rules: Dict[str, Any]) -> Tuple[int, List[
         return 0, ["Description is missing (<= 200 chars)"]
     d = desc.strip()
     if len(d) > rules.get("max_chars", len(d)):
-        issues.append(f"Description exceeds {rules['max_chars']} characters (len={len(d)})")
+        issues.append(
+            f"Description exceeds {rules['max_chars']} characters (len={len(d)})"
+        )
         score -= 20
     if rules.get("no_promo") and has_promo_terms(d):
         issues.append("Remove promotional language in description")
@@ -294,13 +303,21 @@ def compare_fields(
 
     gaps = []
     if summary["title"]["client_len"] < summary["title"]["comp_len"]:
-        gaps.append("Competitor title may include more attributes (e.g., size/material/use-case)")
+        gaps.append(
+            "Competitor title may include more attributes (e.g., size/material/use-case)"
+        )
     if summary["bullets"]["client_count"] < min(5, summary["bullets"]["comp_count"]):
         gaps.append("Add missing bullets to reach 5 concise key features")
-    if summary["description"]["client_len"] < min(200, summary["description"]["comp_len"]):
-        gaps.append("Add a concise use-case/benefit sentence in the description (<= 200 chars)")
+    if summary["description"]["client_len"] < min(
+        200, summary["description"]["comp_len"]
+    ):
+        gaps.append(
+            "Add a concise use-case/benefit sentence in the description (<= 200 chars)"
+        )
     if summary["images"]["client_count"] < summary["images"]["comp_count"]:
-        gaps.append("Upload additional images to match competitor coverage (white background, high-res)")
+        gaps.append(
+            "Upload additional images to match competitor coverage (white background, high-res)"
+        )
     summary["gaps_vs_competitor"] = gaps
     return summary
 

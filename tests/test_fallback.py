@@ -45,7 +45,9 @@ class _DummyGraph:
         }
         return {
             "sku_data": types.SimpleNamespace(client={}, competitor={}),
-            "rule_data": types.SimpleNamespace(rules=rules, source="tests", messages=[]),
+            "rule_data": types.SimpleNamespace(
+                rules=rules, source="tests", messages=[]
+            ),
             "validation": {
                 "title": {"client_score": 0, "issues": []},
                 "bullets": {"client_score": 0, "issues": []},
@@ -87,7 +89,9 @@ def _normalize(text: str) -> str:
     return re.sub(r"\s+", " ", text.strip().lower())
 
 
-def _assert_from_sources(output_bullets: List[str], source_bullets: str, source_description: str):
+def _assert_from_sources(
+    output_bullets: List[str], source_bullets: str, source_description: str
+):
     combined_source = _normalize(source_bullets + " " + source_description)
     for bullet in output_bullets:
         assert _normalize(bullet) in combined_source
@@ -113,11 +117,15 @@ def test_fallback_reuses_client_bullets_and_description_clauses():
     # Original bullets must be preserved after normalization
     assert expected_original_bullets.issubset(normalized_output)
     # Additional bullets must come from the client description
-    _assert_from_sources(response["bullets_edits"], client_data["bullets"], client_data["description"])
+    _assert_from_sources(
+        response["bullets_edits"], client_data["bullets"], client_data["description"]
+    )
 
     # Description must derive from client description text
     if response["description_edit"]:
-        assert _normalize(response["description_edit"]) in _normalize(client_data["description"])
+        assert _normalize(response["description_edit"]) in _normalize(
+            client_data["description"]
+        )
 
 
 def test_fallback_handles_missing_bullets_with_description():
@@ -130,10 +138,14 @@ def test_fallback_handles_missing_bullets_with_description():
     response = _call_fallback(client_data)
 
     assert response["bullets_edits"], "Expected bullets extracted from description"
-    _assert_from_sources(response["bullets_edits"], client_data["bullets"], client_data["description"])
+    _assert_from_sources(
+        response["bullets_edits"], client_data["bullets"], client_data["description"]
+    )
 
     if response["description_edit"]:
-        assert _normalize(response["description_edit"]) in _normalize(client_data["description"])
+        assert _normalize(response["description_edit"]) in _normalize(
+            client_data["description"]
+        )
 
 
 def test_fallback_empty_inputs_return_no_new_claims():
