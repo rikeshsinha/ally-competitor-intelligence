@@ -1446,14 +1446,7 @@ if st.session_state.get("competitor_choices") and not st.session_state.get(
 
 validation_graph = get_validation_graph()
 with st.spinner("Analyzing the competitor matchup and fetching insights..."):
-    result = validation_graph.invoke(
-        {
-            "rules_file": rules_file,
-            "sku_file": csv_file,
-            "client_selection": st.session_state.get("selected_client"),
-            "competitor_selection": st.session_state.get("selected_competitor"),
-        }
-    )
+    result = validation_graph.invoke({"rules_file": rules_file, "sku_file": csv_file})
 sku_data = result.get("sku_data")
 rule_data = result.get("rule_data")
 summary = result.get("validation", {})
