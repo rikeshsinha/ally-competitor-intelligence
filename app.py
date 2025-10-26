@@ -224,10 +224,13 @@ _AUTO_COMPETITOR_SESSION_KEYS = (
     "auto_competitor_error",
 )
 
+_COMPETITOR_MODE_PROMPT_FLAG = "competitor_mode_prompt_rendered"
+
 
 def _clear_auto_competitor_state() -> None:
     for key in _AUTO_COMPETITOR_SESSION_KEYS:
         st.session_state.pop(key, None)
+    st.session_state.pop(_COMPETITOR_MODE_PROMPT_FLAG, None)
 
 
 def _clear_client_selection_state(
@@ -261,6 +264,7 @@ def _clear_competitor_selection_state(*, keep_choices: bool = False) -> None:
         if keep_choices and key == "competitor_choices":
             continue
         st.session_state.pop(key, None)
+    st.session_state.pop(_COMPETITOR_MODE_PROMPT_FLAG, None)
     for key in list(st.session_state.keys()):
         if key.startswith("competitor_brand_select_") or key.startswith(
             "competitor_product_select_"
@@ -397,6 +401,9 @@ def _match_auto_candidate_to_option(candidate: Dict[str, Any]) -> Optional[Dict[
 
 
 def _render_competitor_mode_prompt(*, key_namespace: str = "competitor_mode") -> None:
+    if st.session_state.get(_COMPETITOR_MODE_PROMPT_FLAG):
+        return
+
     mode = st.session_state.get("competitor_selection_mode")
 
     with st.chat_message("assistant"):
@@ -414,6 +421,7 @@ def _render_competitor_mode_prompt(*, key_namespace: str = "competitor_mode") ->
         auto_clicked = auto_col.button(
             "Find best competitor", key=f"{key_namespace}_auto"
         )
+    st.session_state[_COMPETITOR_MODE_PROMPT_FLAG] = True
     if manual_clicked:
         _clear_auto_competitor_state()
         _set_competitor_selection_mode("manual")
