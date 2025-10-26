@@ -698,9 +698,6 @@ def _render_client_selection_ui() -> Optional[Dict[str, Any]]:
         _clear_competitor_selection_state()
         _trigger_rerun()
 
-    if final_selection and st.session_state.get("client_chat_confirmed"):
-        _render_competitor_mode_prompt(key_namespace="competitor_mode_chat")
-
     return final_selection
 
 
