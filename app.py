@@ -1,45 +1,10 @@
-"""
-Streamlit app: Competitor Content Intelligence (Ally skill demo)
-
-What it does
-------------
-- Load a CSV of SKUs (client + competitors)
-- Let you pick a client SKU and a competitor SKU
-- Run rule checks based on the provided Amazon Pet Supplies style guide
-- Compare PDP fields (title, bullets, description, images)
-- Ask an LLM to draft brand- & Amazon‑compliant edits for the client SKU (title/bullets/description)
-- Pause for human approval
-- On approval, output a Final Markdown summary and optional email draft and allow download
-
-How to run
-----------
-1) Install deps:
-   pip install streamlit pandas openai tiktoken python-dotenv
-
-2) Put your files in the same folder as this script:
-   - asin_data_filled.csv
-   - PetSupplies_PetFood_Styleguide_EN_AE._CB1198675309_.pdf (for reference only; rules are encoded below)
-
-3) Set your OpenAI key (or provider of choice):
-   export OPENAI_API_KEY=sk-...
-
-4) Start the app:
-   streamlit run app.py
-
-Notes
------
-- If no API key is set, the app will generate heuristic (non‑LLM) suggestions so you can still demo the flow.
-- CSV column names are auto‑detected; expected columns include: sku_id, title, bullets, description, image_urls, brand, category.
-- Bullets can be delimited by newlines, "|", "•", or semicolons; the app tries to auto‑split.
-"""
-
 from __future__ import annotations
 import math
 import os
 import re
 import json
 import hashlib
-from typing import List, Dict, Any, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 import textwrap
 
 import pandas as pd
@@ -134,10 +99,12 @@ def validate_openai_key() -> Tuple[bool, str]:
         return False, str(e)
 
 
-def get_validation_graph():
+def get_validation_graph() -> Any:
     if "product_validation_graph" not in st.session_state:
 
-        def _run_validation(sku_data, rule_data: RuleExtraction):
+        def _run_validation(
+            sku_data: SKUData, rule_data: RuleExtraction
+        ) -> Dict[str, Any]:
             rules = rule_data.rules or DEFAULT_RULES
             client = getattr(sku_data, "client", {})
             competitor = getattr(sku_data, "competitor", {})
@@ -1625,7 +1592,7 @@ if user_reply:
                 writer = getattr(st, "write_stream", None)
                 if callable(writer):
 
-                    def _stream():
+                    def _stream() -> Iterable[str]:
                         for chunk in chunks:
                             yield chunk
 
