@@ -396,7 +396,7 @@ def _match_auto_candidate_to_option(candidate: Dict[str, Any]) -> Optional[Dict[
     return None
 
 
-def _render_competitor_mode_prompt() -> None:
+def _render_competitor_mode_prompt(*, key_namespace: str = "competitor_mode") -> None:
     mode = st.session_state.get("competitor_selection_mode")
 
     with st.chat_message("assistant"):
@@ -408,8 +408,12 @@ def _render_competitor_mode_prompt() -> None:
         else:
             st.caption("Pick a mode to continue.")
         manual_col, auto_col = st.columns(2)
-        manual_clicked = manual_col.button("I'll pick the competitor", key="competitor_mode_manual")
-        auto_clicked = auto_col.button("Find best competitor", key="competitor_mode_auto")
+        manual_clicked = manual_col.button(
+            "I'll pick the competitor", key=f"{key_namespace}_manual"
+        )
+        auto_clicked = auto_col.button(
+            "Find best competitor", key=f"{key_namespace}_auto"
+        )
     if manual_clicked:
         _clear_auto_competitor_state()
         _set_competitor_selection_mode("manual")
@@ -695,7 +699,7 @@ def _render_client_selection_ui() -> Optional[Dict[str, Any]]:
         _trigger_rerun()
 
     if final_selection and st.session_state.get("client_chat_confirmed"):
-        _render_competitor_mode_prompt()
+        _render_competitor_mode_prompt(key_namespace="competitor_mode_chat")
 
     return final_selection
 
@@ -1275,7 +1279,7 @@ if st.session_state.get("client_choices") and not st.session_state.get(
 
 mode = st.session_state.get("competitor_selection_mode")
 if mode not in {"manual", "auto"}:
-    _render_competitor_mode_prompt()
+    _render_competitor_mode_prompt(key_namespace="competitor_mode_main")
     st.stop()
 
 if mode == "auto":
