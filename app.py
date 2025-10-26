@@ -1325,29 +1325,6 @@ if user_reply:
             with st.chat_message("assistant"):
                 st.markdown(message)
 
-        elif action == "select_competitor":
-            note = "Sure — let's pick a different competitor. Resetting that step now."
-            chat_history.append({"role": "assistant", "content": note})
-            with st.chat_message("assistant"):
-                st.markdown(note)
-
-            for key in [
-                "selected_competitor",
-                "competitor_chat_confirmed",
-                "selected_competitor_brand",
-                "competitor_brand_user_ack",
-                "competitor_product_user_ack",
-                "competitor_product_select_key",
-                "competitor_chat_rendered_version",
-            ]:
-                st.session_state.pop(key, None)
-
-            st.session_state.pop("issues_gaps_rendered_version", None)
-            st.session_state.pop("issues_gaps_message", None)
-            st.session_state.pop(chat_history_key, None)
-            st.session_state.pop("llm_out", None)
-            _trigger_rerun()
-
         elif action == "stop":
             st.session_state[stop_key] = True
             note = (
