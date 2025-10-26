@@ -64,7 +64,9 @@ USER_PROMPT_TEMPLATE = (
     "the client's source content. Rephrase each client bullet, and only create additional bullets when needed using "
     "details from the client description. Also provide a brief rationale for each change that references what the "
     "competitor does while keeping all proposed client copy free of competitor language or claims.\n"
-    "Return JSON with keys: title_edit, bullets_edits (list), description_edit, rationales (list of strings)."
+    "Return a JSON object with a `variants` array containing exactly three objects. Each variant object must "
+    "include keys: title_edit (string), bullets_edits (array of 3-5 strings), description_edit (string), and "
+    "rationales (array of strings). You may include an optional metadata object for any additional context you need."
 )
 
 
@@ -924,7 +926,8 @@ def call_llm(
         if not desc and fixed_bullets:
             desc = " ".join(fixed_bullets)
         desc = re.sub(r"\s+", " ", desc)[: rules["description"]["max_chars"]].strip()
-        response = {
+
+        variant = {
             "title_edit": title,
             "bullets_edits": fixed_bullets,
             "description_edit": desc,
@@ -933,10 +936,10 @@ def call_llm(
                 f"Use up to {rules['bullets']['max_count']} concise bullets starting with a capital letter, no ending punctuation",
                 f"Short description (<= {rules['description']['max_chars']} chars) with clear benefit; remove promo language if present",
             ],
-            "_llm": False,
         }
+        response: Dict[str, Any] = {"variants": [variant], "_llm": False}
         if normalized_context:
-            response["user_guidance"] = f"USER GUIDANCE:\n{normalized_context}"
+            response["metadata"] = {"user_guidance": f"USER GUIDANCE:\n{normalized_context}"}
         return response
 
     # Real LLM call
@@ -952,11 +955,69 @@ def call_llm(
         )
         content = rsp.choices[0].message.content
         data = json.loads(content)
+
+        variants_payload = data.get("variants") if isinstance(data, dict) else None
+        normalized_variants: List[Dict[str, Any]] = []
+        if isinstance(variants_payload, list):
+            for variant in variants_payload:
+                if not isinstance(variant, dict):
+                    continue
+                title_edit = str(variant.get("title_edit", ""))
+                bullets = variant.get("bullets_edits", [])
+                if not isinstance(bullets, list):
+                    bullets = [bullets]
+                bullets_edits = [str(b).strip() for b in bullets if str(b).strip()]
+                description_edit = str(variant.get("description_edit", ""))
+                rationales = variant.get("rationales", [])
+                if not isinstance(rationales, list):
+                    rationales = [rationales]
+                rationale_entries = [str(r).strip() for r in rationales if str(r).strip()]
+                normalized_variants.append(
+                    {
+                        "title_edit": title_edit,
+                        "bullets_edits": bullets_edits,
+                        "description_edit": description_edit,
+                        "rationales": rationale_entries,
+                    }
+                )
+
+        # Legacy compatibility: wrap single-response payloads into variants list
+        if not normalized_variants and isinstance(data, dict):
+            candidate_keys = {"title_edit", "bullets_edits", "description_edit", "rationales"}
+            if candidate_keys.intersection(data.keys()):
+                single_variant = {
+                    "title_edit": str(data.get("title_edit", "")),
+                    "bullets_edits": [
+                        str(b).strip()
+                        for b in (
+                            data.get("bullets_edits")
+                            if isinstance(data.get("bullets_edits"), list)
+                            else [data.get("bullets_edits")]
+                        )
+                        if b is not None and str(b).strip()
+                    ],
+                    "description_edit": str(data.get("description_edit", "")),
+                    "rationales": [
+                        str(r).strip()
+                        for r in (
+                            data.get("rationales")
+                            if isinstance(data.get("rationales"), list)
+                            else [data.get("rationales")]
+                        )
+                        if r is not None and str(r).strip()
+                    ],
+                }
+                normalized_variants.append(single_variant)
+
+        if not normalized_variants:
+            raise ValueError("LLM response did not include any variants")
+
+        data["variants"] = normalized_variants[:3]
         data["_llm"] = True
         return data
     except Exception as e:
         # Fallback to heuristic
-        response = {
+        variant = {
             "title_edit": enforce_title_caps(
                 (client_data.get("title") or "")[: rules["title"]["max_chars"]]
             ),
@@ -969,10 +1030,13 @@ def call_llm(
                 : rules["description"]["max_chars"]
             ],
             "rationales": ["LLM error; generated heuristic placeholders"],
-            "_llm": False,
         }
+        response: Dict[str, Any] = {"variants": [variant], "_llm": False}
+        metadata: Dict[str, Any] = {"error": str(e)}
         if normalized_context:
-            response["user_guidance"] = f"USER GUIDANCE:\n{normalized_context}"
+            metadata["user_guidance"] = f"USER GUIDANCE:\n{normalized_context}"
+        if metadata:
+            response["metadata"] = metadata
         return response
 
 
@@ -1483,6 +1547,8 @@ if issues_gaps_version != stored_issues_gaps_version:
     st.session_state.pop("issues_gaps_decision", None)
     st.session_state.pop("issues_gaps_decision_version", None)
     st.session_state.pop("llm_out", None)
+    st.session_state.pop("llm_out_meta", None)
+    st.session_state.pop("selected_variant_index", None)
     st.session_state.pop(stop_key, None)
 else:
     st.session_state.setdefault("issues_gaps_message", issues_gaps_message)
@@ -1547,16 +1613,27 @@ if user_reply:
             with st.spinner(
                 "Consulting OpenAI for brand-safe edits and preparing fallbacks..."
             ):
-                llm_out = call_llm(
+                llm_result = call_llm(
                     client_data,
                     comp_data,
                     current_rules,
                     user_context=user_context_str,
                 )
-            st.session_state["llm_out"] = llm_out
+
+            variants = []
+            metadata: Dict[str, Any] = {}
+            if isinstance(llm_result, dict):
+                variants = [
+                    v for v in llm_result.get("variants", []) if isinstance(v, dict)
+                ]
+                metadata = {k: v for k, v in llm_result.items() if k != "variants"}
+
+            st.session_state["llm_out"] = variants
+            st.session_state["llm_out_meta"] = metadata
+            st.session_state["selected_variant_index"] = 0
             st.session_state.pop(stop_key, None)
 
-            if llm_out.get("_llm"):
+            if metadata.get("_llm"):
                 followup = (
                     "Ta-da! Fresh from Ally's idea oven (with a dash of OpenAI magic) — check out these draft edits."
                 )
@@ -1635,7 +1712,8 @@ if user_reply:
 st.divider()
 
 if "llm_out" in st.session_state:
-    out = st.session_state["llm_out"]
+    variants: List[Dict[str, Any]] = st.session_state.get("llm_out", [])
+    metadata: Dict[str, Any] = st.session_state.get("llm_out_meta", {})
     rules = current_rules
     title_max = rules["title"]["max_chars"]
     bullet_max = rules["bullets"]["max_count"]
@@ -1644,77 +1722,118 @@ if "llm_out" in st.session_state:
     st.subheader("Drafted compliant edits")
     _mode = (
         "OpenAI (validated)"
-        if st.session_state.get("openai_valid")
+        if metadata.get("_llm") and st.session_state.get("openai_valid")
         else (
             "OpenAI (unvalidated)"
             if (
-                st.session_state.get("OPENAI_API_KEY_UI") or os.getenv("OPENAI_API_KEY")
+                metadata.get("_llm")
+                and (
+                    st.session_state.get("OPENAI_API_KEY_UI")
+                    or os.getenv("OPENAI_API_KEY")
+                )
             )
             else "Heuristic fallback (no key)"
         )
     )
     st.caption(f"Mode: {_mode}")
 
-    st.markdown("**Proposed Title**")
-    st.code(out.get("title_edit", ""))
-
-    st.markdown(f"**Proposed Bullets (up to {bullet_max})**")
-    for b in out.get("bullets_edits", [])[:bullet_max]:
-        st.write(f"• {re.sub(r'[.!?]+$', '', b).strip()}")
-
-    st.markdown(f"**Proposed Description (<= {desc_max} chars)**")
-    st.code((out.get("description_edit", ""))[:desc_max])
-
-    if out.get("rationales"):
-        with st.expander("Why these edits?"):
-            for r in out["rationales"]:
-                st.write("- ", r)
-
-    st.caption(f"Source: {rules_source}")
-
-    approved = st.checkbox("I approve these edits")
-    if approved:
-        # Final Markdown summary
-        final_md = []
-        final_md.append(f"# Final Content — Client SKU {client_data['sku']}")
-        final_md.append("\n## Title (proposed)\n")
-        final_md.append(out.get("title_edit", ""))
-        final_md.append("\n## Bullets (proposed)\n")
-        for b in out.get("bullets_edits", [])[:bullet_max]:
-            final_md.append(f"- {re.sub(r'[.!?]+$', '', b).strip()}")
-        final_md.append("\n\n## Description (proposed)\n")
-        final_md.append((out.get("description_edit", ""))[:desc_max])
-
-        final_md.append("\n\n## Rationale & Rule Compliance\n")
-        final_md.append(
-            f"- Title ≤ {title_max} chars; "
-            f"{'brand required' if rules['title']['brand_required'] else 'brand optional'}; "
-            f"{'avoid ALL CAPS' if rules['title']['no_all_caps'] else 'ALL CAPS allowed'}; "
-            f"{'no promo language' if rules['title']['no_promo'] else 'promo allowed'}"
+    if not variants:
+        st.warning(
+            "No draft variants are available right now. Try requesting new edits to regenerate suggestions."
         )
-        final_md.append(
-            f"- Up to {bullet_max} bullets; {'start with capitals' if rules['bullets']['start_capital'] else 'any case allowed'}; "
-            f"{'no ending punctuation' if rules['bullets']['no_end_punct'] else 'ending punctuation allowed'}; "
-            f"{'no promo/seller info' if rules['bullets']['no_promo_or_seller_info'] else 'promo allowed'}"
-        )
-        final_md.append(
-            f"- Description ≤ {desc_max} chars; "
-            f"{'no promo language' if rules['description']['no_promo'] else 'promo allowed'}; "
-            f"{'avoid ALL CAPS' if rules['description']['sentence_caps'] else 'ALL CAPS allowed'}"
-        )
-        for r in out.get("rationales", []):
-            final_md.append(f"- {r}")
+    else:
+        variant_labels = []
+        for idx, variant in enumerate(variants):
+            title_preview = str(variant.get("title_edit", "")).strip()
+            if title_preview:
+                title_preview = re.sub(r"\s+", " ", title_preview)
+                title_preview = title_preview[:60] + ("…" if len(title_preview) > 60 else "")
+                variant_labels.append(f"Variant {idx + 1}: {title_preview}")
+            else:
+                variant_labels.append(f"Variant {idx + 1}")
 
-        final_md_str = "\n".join(final_md).strip()
-        st.markdown("---")
-        st.subheader("Final Markdown")
-        st.code(final_md_str, language="markdown")
-        st.download_button(
-            "Download final.md", final_md_str.encode("utf-8"), file_name="final.md"
+        default_index = st.session_state.get("selected_variant_index", 0)
+        if not isinstance(default_index, int):
+            default_index = 0
+        if variants:
+            default_index = max(0, min(default_index, len(variants) - 1))
+
+        selected_index = st.radio(
+            "Select a variant to prepare for approval",
+            options=list(range(len(variants))),
+            index=default_index,
+            format_func=lambda idx: variant_labels[idx],
+            key="selected_variant_index",
         )
 
-        with st.expander("Email draft to stakeholders"):
-            email_md = f"""
+        tabs = st.tabs([f"Variant {i + 1}" for i in range(len(variants))])
+        for idx, tab in enumerate(tabs):
+            with tab:
+                variant = variants[idx]
+                st.markdown("**Proposed Title**")
+                st.code(str(variant.get("title_edit", ""))[:title_max])
+
+                st.markdown(f"**Proposed Bullets (up to {bullet_max})**")
+                for b in variant.get("bullets_edits", [])[:bullet_max]:
+                    bullet_text = str(b)
+                    st.write(f"• {re.sub(r'[.!?]+$', '', bullet_text).strip()}")
+
+                st.markdown(f"**Proposed Description (<= {desc_max} chars)**")
+                st.code(str(variant.get("description_edit", ""))[:desc_max])
+
+                rationales = variant.get("rationales", [])
+                if rationales:
+                    with st.expander("Why these edits?", expanded=False):
+                        for r in rationales:
+                            st.write("- ", r)
+
+        st.caption(f"Source: {rules_source}")
+
+        selected_variant = variants[selected_index]
+
+        approved = st.checkbox("I approve the selected variant")
+        if approved:
+            # Final Markdown summary
+            final_md = []
+            final_md.append(f"# Final Content — Client SKU {client_data['sku']}")
+            final_md.append("\n## Title (proposed)\n")
+            final_md.append(str(selected_variant.get("title_edit", "")))
+            final_md.append("\n## Bullets (proposed)\n")
+            for b in selected_variant.get("bullets_edits", [])[:bullet_max]:
+                final_md.append(f"- {re.sub(r'[.!?]+$', '', str(b)).strip()}")
+            final_md.append("\n\n## Description (proposed)\n")
+            final_md.append(str(selected_variant.get("description_edit", ""))[:desc_max])
+
+            final_md.append("\n\n## Rationale & Rule Compliance\n")
+            final_md.append(
+                f"- Title ≤ {title_max} chars; "
+                f"{'brand required' if rules['title']['brand_required'] else 'brand optional'}; "
+                f"{'avoid ALL CAPS' if rules['title']['no_all_caps'] else 'ALL CAPS allowed'}; "
+                f"{'no promo language' if rules['title']['no_promo'] else 'promo allowed'}"
+            )
+            final_md.append(
+                f"- Up to {bullet_max} bullets; {'start with capitals' if rules['bullets']['start_capital'] else 'any case allowed'}; "
+                f"{'no ending punctuation' if rules['bullets']['no_end_punct'] else 'ending punctuation allowed'}; "
+                f"{'no promo/seller info' if rules['bullets']['no_promo_or_seller_info'] else 'promo allowed'}"
+            )
+            final_md.append(
+                f"- Description ≤ {desc_max} chars; "
+                f"{'no promo language' if rules['description']['no_promo'] else 'promo allowed'}; "
+                f"{'avoid ALL CAPS' if rules['description']['sentence_caps'] else 'ALL CAPS allowed'}"
+            )
+            for r in selected_variant.get("rationales", []):
+                final_md.append(f"- {r}")
+
+            final_md_str = "\n".join(final_md).strip()
+            st.markdown("---")
+            st.subheader("Final Markdown")
+            st.code(final_md_str, language="markdown")
+            st.download_button(
+                "Download final.md", final_md_str.encode("utf-8"), file_name="final.md"
+            )
+
+            with st.expander("Email draft to stakeholders"):
+                email_md = f"""
 Subject: Approved PDP Edits for SKU {client_data["sku"]}
 
 Hi team,
@@ -1723,28 +1842,28 @@ Please find the approved PDP content updates for SKU {client_data["sku"]} below.
 
 Title
 -----
-{out.get("title_edit", "")}
+{str(selected_variant.get("title_edit", ""))}
 
 Bullets
 -------
-{chr(10).join([f"- {re.sub(r'[.!?]+$', '', b).strip()}" for b in out.get("bullets_edits", [])[:bullet_max]])}
+{chr(10).join([f"- {re.sub(r'[.!?]+$', '', str(b)).strip()}" for b in selected_variant.get("bullets_edits", [])[:bullet_max]])}
 
 Description
 ----------
-{(out.get("description_edit", ""))[:desc_max]}
+{str(selected_variant.get("description_edit", ""))[:desc_max]}
 
 Rationale
 ---------
 - Alignment with style rules; improved specificity vs competitor
-{chr(10).join([f"- {r}" for r in out.get("rationales", [])])}
+{chr(10).join([f"- {r}" for r in selected_variant.get("rationales", [])])}
 
 Thanks,
 Ally (Competitor Content Intelligence)
 """.strip()
-            st.code(email_md)
-            st.download_button(
-                "Download email.txt", email_md.encode("utf-8"), file_name="email.txt"
-            )
+                st.code(email_md)
+                st.download_button(
+                    "Download email.txt", email_md.encode("utf-8"), file_name="email.txt"
+                )
 else:
     st.info(
         "Use the chat below to ask for edits, generate suggested edits, choose another competitor, or wrap up the review."
