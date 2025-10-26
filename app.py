@@ -1780,5 +1780,5 @@ Ally (Competitor Content Intelligence)
             )
 else:
     st.info(
-        "Use the chat above to ask for edits, choose another competitor, or wrap up the review."
+        "Use the chat above to ask for edits, generate suggested edits, choose another competitor, or wrap up the review."
     )
