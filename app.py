@@ -35,6 +35,11 @@ try:
 except Exception:  # pragma: no cover
     OpenAI = None  # type: ignore
 
+# Standard assistant follow-up after presenting rule checks
+RULE_CHECKS_FOLLOWUP_PROMPT = (
+    "Would you like me to generate a draft of compliant edits now, or do you have any other questions?"
+)
+
 # ---------------------------
 # LLM prompt & call
 # ---------------------------
@@ -1635,7 +1640,8 @@ if issues_gaps_version != stored_issues_gaps_version:
     st.session_state["issues_gaps_rendered_version"] = issues_gaps_version
     st.session_state["issues_gaps_message"] = issues_gaps_message
     st.session_state[chat_history_key] = [
-        {"role": "assistant", "content": issues_gaps_message}
+        {"role": "assistant", "content": issues_gaps_message},
+        {"role": "assistant", "content": RULE_CHECKS_FOLLOWUP_PROMPT},
     ]
     st.session_state.pop("issues_gaps_decision", None)
     st.session_state.pop("issues_gaps_decision_version", None)
@@ -1650,6 +1656,17 @@ else:
         history[0] = {"role": "assistant", "content": issues_gaps_message}
     else:
         history.append({"role": "assistant", "content": issues_gaps_message})
+
+    if not any(
+        entry.get("role") == "assistant"
+        and entry.get("content") == RULE_CHECKS_FOLLOWUP_PROMPT
+        for entry in history
+    ):
+        insert_at = 1 if history else 0
+        history.insert(
+            insert_at,
+            {"role": "assistant", "content": RULE_CHECKS_FOLLOWUP_PROMPT},
+        )
 
 chat_history = st.session_state.get(chat_history_key, [])
 for entry in chat_history:
