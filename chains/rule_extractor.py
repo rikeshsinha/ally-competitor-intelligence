@@ -11,10 +11,16 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 try:  # Optional dependency; handled gracefully if unavailable
-    from langchain.document_loaders import PyPDFLoader  # type: ignore
+    from langchain_community.document_loaders import PyPDFLoader  # type: ignore
+except Exception:  # pragma: no cover - optional dependency guard
+    try:  # Backwards compatibility with older langchain package layout
+        from langchain.document_loaders import PyPDFLoader  # type: ignore
+    except Exception:  # pragma: no cover - optional dependency guard
+        PyPDFLoader = None  # type: ignore
+
+try:  # Optional dependency; handled gracefully if unavailable
     from langchain_text_splitters import RecursiveCharacterTextSplitter  # type: ignore
 except Exception:  # pragma: no cover - optional dependency guard
-    PyPDFLoader = None  # type: ignore
     RecursiveCharacterTextSplitter = None  # type: ignore
 
 try:  # Secondary fallback when langchain PDF loader is missing
