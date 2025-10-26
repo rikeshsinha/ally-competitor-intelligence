@@ -150,6 +150,11 @@ def _format_product_dropdown_label(option: Optional[Dict[str, Any]]) -> str:
         str(option.get("title_label") or option.get("title_value") or "").strip()
         or "Unnamed product"
     )
+    sku_hint = str(
+        option.get("sku_display") or option.get("sku_original") or ""
+    ).strip()
+    if sku_hint:
+        title = f"{title} · {sku_hint}"
     ordinal = option.get("brand_option_ordinal") or option.get("ordinal")
     if ordinal is not None:
         return f"{ordinal}. {title}"
@@ -521,6 +526,8 @@ def _apply_auto_selection(
         or matched_option.get("title_value"),
         "ordinal": matched_option.get("ordinal")
         or matched_option.get("brand_option_ordinal"),
+        "sku_display": str(matched_option.get("sku_display") or "").strip(),
+        "sku_original": str(matched_option.get("sku_original") or "").strip(),
     }
 
     st.session_state["selected_competitor"] = selection_record
@@ -533,12 +540,23 @@ def _apply_auto_selection(
         st.session_state.pop("competitor_brand_user_ack", None)
 
     label = selection_record.get("label")
+    sku_for_ack = selection_record.get("sku_display") or selection_record.get(
+        "sku_original"
+    )
+    sku_for_ack = str(sku_for_ack or "").strip()
+    brand_text = str(brand or "").strip()
     if label and brand:
-        st.session_state["competitor_product_user_ack"] = f"{brand} — {label}"
+        ack = f"{brand_text} — {label}" if brand_text else label
     elif label:
-        st.session_state["competitor_product_user_ack"] = label
+        ack = label
     elif brand:
-        st.session_state["competitor_product_user_ack"] = brand
+        ack = brand_text
+    else:
+        ack = ""
+    if sku_for_ack:
+        ack = f"{ack} (SKU: {sku_for_ack})" if ack else f"SKU: {sku_for_ack}"
+    if ack:
+        st.session_state["competitor_product_user_ack"] = ack
     else:
         st.session_state.pop("competitor_product_user_ack", None)
 
@@ -740,6 +758,12 @@ def _render_client_selection_ui() -> Optional[Dict[str, Any]]:
             ).strip(),
             "ordinal": selected_product_option.get("ordinal")
             or selected_product_option.get("brand_option_ordinal"),
+            "sku_display": str(
+                selected_product_option.get("sku_display") or ""
+            ).strip(),
+            "sku_original": str(
+                selected_product_option.get("sku_original") or ""
+            ).strip(),
         }
         st.session_state["selected_client"] = selection_record
         st.session_state["client_chat_confirmed"] = True
@@ -747,12 +771,18 @@ def _render_client_selection_ui() -> Optional[Dict[str, Any]]:
         brand_for_ack = selection_record.get("brand", "") or ""
         if brand_for_ack:
             brand_for_ack = str(brand_for_ack).strip()
+        sku_for_ack = (
+            selection_record.get("sku_display") or selection_record.get("sku_original")
+        )
+        sku_for_ack = str(sku_for_ack or "").strip()
         if label and brand_for_ack:
             ack_text = f"{brand_for_ack} — {label}"
         elif label:
             ack_text = label
         else:
             ack_text = brand_for_ack
+        if sku_for_ack:
+            ack_text = f"{ack_text} (SKU: {sku_for_ack})"
         st.session_state["client_product_user_ack"] = ack_text
 
     product_ack = st.session_state.get("client_product_user_ack")
@@ -920,18 +950,28 @@ def _render_competitor_selection_ui() -> Optional[Dict[str, Any]]:
             or selected_product_option.get("title_value"),
             "ordinal": selected_product_option.get("ordinal")
             or selected_product_option.get("brand_option_ordinal"),
+            "sku_display": str(
+                selected_product_option.get("sku_display") or ""
+            ).strip(),
+            "sku_original": str(
+                selected_product_option.get("sku_original") or ""
+            ).strip(),
         }
         st.session_state["selected_competitor"] = selection_record
         st.session_state["competitor_chat_confirmed"] = True
         label = selection_record.get("label")
+        brand_text = str(selection_record.get("brand") or "").strip()
+        sku_for_ack = (
+            selection_record.get("sku_display") or selection_record.get("sku_original")
+        )
+        sku_for_ack = str(sku_for_ack or "").strip()
         if label:
-            st.session_state["competitor_product_user_ack"] = (
-                f"{selection_record.get('brand', '')} — {label}"
-            )
+            ack = f"{brand_text} — {label}" if brand_text else label
         else:
-            st.session_state["competitor_product_user_ack"] = selection_record.get(
-                "brand"
-            )
+            ack = brand_text
+        if sku_for_ack:
+            ack = f"{ack} (SKU: {sku_for_ack})" if ack else f"SKU: {sku_for_ack}"
+        st.session_state["competitor_product_user_ack"] = ack
 
     product_ack = st.session_state.get("competitor_product_user_ack")
     if product_ack:
