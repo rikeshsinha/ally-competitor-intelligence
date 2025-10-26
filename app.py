@@ -1542,12 +1542,17 @@ if user_reply:
             st.markdown(user_reply)
 
         client = get_openai_client()
-        action = classify_review_followup(
-            st.session_state.get("issues_gaps_message", issues_gaps_message),
-            user_reply,
-            client=client,
-            additional_products=st.session_state.get("orchestrator_additional_products"),
-        )
+        with st.spinner(
+            "Reviewing your reply with Ally's policy brain to pick the best next step..."
+        ):
+            action = classify_review_followup(
+                st.session_state.get("issues_gaps_message", issues_gaps_message),
+                user_reply,
+                client=client,
+                additional_products=st.session_state.get(
+                    "orchestrator_additional_products"
+                ),
+            )
         st.session_state["issues_gaps_last_action"] = action
 
         if action == "generate_edits":
@@ -1571,7 +1576,9 @@ if user_reply:
             st.session_state["issues_gaps_user_context"] = user_context_entries
             user_context_str = "\n".join(user_context_entries) if user_context_entries else None
 
-            with st.spinner("Generating suggestions..."):
+            with st.spinner(
+                "Consulting OpenAI for brand-safe edits and preparing fallbacks..."
+            ):
                 llm_out = call_llm(
                     client_data,
                     comp_data,
@@ -1599,16 +1606,19 @@ if user_reply:
                 st.markdown(followup)
 
         elif action == "answer_question":
-            answer_text, chunks = answer_review_question(
-                user_reply,
-                issues_summary=st.session_state.get(
-                    "issues_gaps_message", issues_gaps_message
-                ),
-                current_rules=current_rules,
-                client_data=client_data,
-                competitor_data=comp_data,
-                client=client,
-            )
+            with st.spinner(
+                "Gathering a grounded answer from the context and OpenAI (with heuristics on standby)..."
+            ):
+                answer_text, chunks = answer_review_question(
+                    user_reply,
+                    issues_summary=st.session_state.get(
+                        "issues_gaps_message", issues_gaps_message
+                    ),
+                    current_rules=current_rules,
+                    client_data=client_data,
+                    competitor_data=comp_data,
+                    client=client,
+                )
             chat_history.append({"role": "assistant", "content": answer_text})
             with st.chat_message("assistant"):
                 writer = getattr(st, "write_stream", None)
@@ -1694,9 +1704,7 @@ if "llm_out" in st.session_state:
 
     st.caption(f"Source: {rules_source}")
 
-    approved = st.checkbox(
-        "I approve these edits and confirm they follow brand & Amazon rules"
-    )
+    approved = st.checkbox("I approve these edits")
     if approved:
         # Final Markdown summary
         final_md = []
