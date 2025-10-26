@@ -13,6 +13,8 @@ from chains.sku_extractor import SKUData, create_sku_extractor
 class ProductValidationState(TypedDict, total=False):
     sku_file: Any
     rules_file: Any
+    client_selection: Dict[str, Any]
+    competitor_selection: Dict[str, Any]
     sku_data: SKUData
     rule_data: RuleExtraction
     validation: Dict[str, Any]
@@ -25,7 +27,13 @@ def build_product_validation_graph(
     rule_chain = create_rule_extractor()
 
     def run_sku(state: ProductValidationState) -> Dict[str, Any]:
-        result = sku_chain.invoke({"sku_file": state.get("sku_file")})
+        result = sku_chain.invoke(
+            {
+                "sku_file": state.get("sku_file"),
+                "client_selection": state.get("client_selection"),
+                "competitor_selection": state.get("competitor_selection"),
+            }
+        )
         return {"sku_data": result}
 
     def run_rules(state: ProductValidationState) -> Dict[str, Any]:
