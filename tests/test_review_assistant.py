@@ -55,16 +55,16 @@ def test_heuristic_generate_edits():
     assert action == "generate_edits"
 
 
-def test_heuristic_select_competitor():
-    action = classify_review_followup(
-        "summary", "Let's pick a different competitor brand."
-    )
-    assert action == "select_competitor"
-
-
 def test_heuristic_find_competitors():
     action = classify_review_followup(
         "summary", "Can you find competitors or show similar products?"
+    )
+    assert action == "find_competitors"
+
+
+def test_heuristic_competitor_change_maps_to_find_competitors():
+    action = classify_review_followup(
+        "summary", "Let's pick a different competitor brand."
     )
     assert action == "find_competitors"
 
@@ -87,18 +87,18 @@ def test_heuristic_answer_question_for_rule_request():
     assert action == "answer_question"
 
 
-def test_llm_result_overrides_heuristic():
-    payload = json.dumps({"action": "select_competitor"})
-    client = _DummyClient(payload)
-    action = classify_review_followup("summary", "Maybe", client=client)
-    assert action == "select_competitor"
-
-
 def test_llm_find_competitors_action():
     payload = json.dumps({"action": "find_competitors"})
     client = _DummyClient(payload)
     action = classify_review_followup("summary", "Maybe", client=client)
     assert action == "find_competitors"
+
+
+def test_llm_select_competitor_falls_back_to_heuristic():
+    payload = json.dumps({"action": "select_competitor"})
+    client = _DummyClient(payload)
+    action = classify_review_followup("summary", "Maybe", client=client)
+    assert action == "clarify"
 
 
 def test_llm_answer_question_override():
