@@ -1562,7 +1562,7 @@ def _format_rules_notes(notes: Any) -> str:
 
 formatted_rules_notes = _format_rules_notes(rules_notes)
 
-st.subheader("Rule checks (Client)")
+st.subheader("Insights")
 if formatted_rules_notes:
     st.caption(f"Rules source: {rules_source} — {formatted_rules_notes}")
 else:
