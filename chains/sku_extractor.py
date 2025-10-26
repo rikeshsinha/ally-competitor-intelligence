@@ -127,8 +127,8 @@ class _SKUExtractor:
 
         comp_idx = matched_option["row_index"]
 
-        client_row = df.iloc[[client_idx]] if len(df) else df.iloc[[]]
-        comp_row = df.iloc[[comp_idx]] if len(df) else df.iloc[[]]
+        client_row = self._select_row(df, client_idx)
+        comp_row = self._select_row(df, comp_idx)
 
         if client_row.empty or comp_row.empty:
             st.warning("Please select valid SKUs")
@@ -617,7 +617,7 @@ class _SKUExtractor:
             return None
         if not column_map:
             return None
-        row = df.iloc[[row_index]]
+        row = self._select_row(df, row_index)
         if row.empty:
             return None
         brand_col = column_map.get("brand_col")
@@ -667,6 +667,27 @@ class _SKUExtractor:
         else:
             record["universe"] = None
         return record
+
+    def _select_row(self, df: pd.DataFrame, row_index: Any) -> pd.DataFrame:
+        """Return a single-row DataFrame matching row_index or an empty frame."""
+
+        if df.empty:
+            return df.iloc[[]]
+
+        try:
+            return df.loc[[row_index]]
+        except (KeyError, TypeError):
+            pass
+
+        try:
+            position = int(row_index)
+        except (TypeError, ValueError):
+            return df.iloc[[]]
+
+        if 0 <= position < len(df):
+            return df.iloc[[position]]
+
+        return df.iloc[[]]
 
 
 def create_sku_extractor() -> RunnableLambda:
