@@ -42,7 +42,7 @@ except Exception:  # pragma: no cover
 SYSTEM_PROMPT = (
     "You are a meticulous Amazon PDP content editor for Pet Supplies. "
     "Follow the provided style rules strictly. Return compliant copy and explain briefly how each edit improves "
-    "against the competitor."
+    "against the competitor. Always craft exactly three distinct edit variants when asked for draft edits."
 )
 
 USER_PROMPT_TEMPLATE = (
@@ -64,9 +64,10 @@ USER_PROMPT_TEMPLATE = (
     "the client's source content. Rephrase each client bullet, and only create additional bullets when needed using "
     "details from the client description. Also provide a brief rationale for each change that references what the "
     "competitor does while keeping all proposed client copy free of competitor language or claims.\n"
-    "Return a JSON object with a `variants` array containing exactly three objects. Each variant object must "
-    "include keys: title_edit (string), bullets_edits (array of 3-5 strings), description_edit (string), and "
-    "rationales (array of strings). You may include an optional metadata object for any additional context you need."
+    "Return a JSON object with a `variants` array containing exactly three objects (no more, no fewer). Each variant "
+    "object must include keys: title_edit (string), bullets_edits (array of 3-5 strings), description_edit (string), "
+    "and rationales (array of strings). You may include an optional metadata object for any additional context you "
+    "need."
 )
 
 
