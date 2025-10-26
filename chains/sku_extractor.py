@@ -75,9 +75,7 @@ class _SKUExtractor:
 
         df: pd.DataFrame = state["dataframe"]
         column_map: Dict[str, str] = state["column_map"]
-        brand_map: Dict[str, List[tuple[str, int, str, str]]] = state.get(
-            "brand_map", {}
-        )
+        brand_map: Dict[str, List[tuple[str, int]]] = state.get("brand_map", {})
         brands: List[str] = state.get("brands", [])
 
         current_mode = st.session_state.get("competitor_selection_mode")
@@ -185,7 +183,7 @@ class _SKUExtractor:
             st.stop()
 
         client_brand_groups, client_options = self._build_competitor_catalog(
-            brands, brand_map, df
+            brands, brand_map
         )
         client_version = self._client_version_key(client_options)
         previous_client_state = st.session_state.get("client_choices")
@@ -383,7 +381,7 @@ class _SKUExtractor:
 
     def _build_sku_list(
         self, df: pd.DataFrame, column_map: Dict[str, str]
-    ) -> tuple[List[str], Dict[str, List[tuple[str, int, str, str]]]]:
+    ) -> tuple[List[str], Dict[str, List[tuple[str, int]]]]:
         sku_col = column_map["sku_col"]
         raw_series = df[sku_col].fillna("")
         sku_series = raw_series.astype(str).str.strip()
@@ -401,7 +399,7 @@ class _SKUExtractor:
         brand_col = column_map["brand_col"]
         title_col = column_map["title_col"]
 
-        brand_map: Dict[str, List[tuple[str, int, str, str]]] = {}
+        brand_map: Dict[str, List[tuple[str, int]]] = {}
         brands: List[str] = []
         for idx, row in df.iterrows():
             brand_value = row[brand_col]
@@ -416,20 +414,13 @@ class _SKUExtractor:
             title_label = "" if pd.isna(title_value) else str(title_value).strip()
             if not title_label:
                 title_label = df.at[idx, "_display_sku"]
-            brand_map[brand_label].append(
-                (
-                    title_label,
-                    idx,
-                    df.at[idx, "_display_sku"],
-                    sku_series.iloc[idx],
-                )
-            )
+            brand_map[brand_label].append((title_label, idx))
 
         return brands, brand_map
 
     def _select_title_for_brand(
         self,
-        brand_map: Dict[str, List[tuple[str, int, str, str]]],
+        brand_map: Dict[str, List[tuple[str, int]]],
         brand: str,
         prompt: str,
         default_index: Optional[int] = 0,
@@ -460,20 +451,14 @@ class _SKUExtractor:
         return option_records[selected_idx]["row_index"]
 
     def _options_for_brand(
-        self, brand_map: Dict[str, List[tuple[str, int, str, str]]], brand: str
+        self, brand_map: Dict[str, List[tuple[str, int]]], brand: str
     ) -> List[Dict[str, Any]]:
         raw_options = brand_map.get(brand, [])
         if not raw_options:
             return []
         counts: Dict[str, int] = {}
         options: List[Dict[str, Any]] = []
-        for option_tuple in raw_options:
-            if len(option_tuple) >= 4:
-                title_value, row_index, sku_display, sku_original = option_tuple[:4]
-            else:
-                title_value, row_index = option_tuple[:2]
-                sku_display = ""
-                sku_original = ""
+        for title_value, row_index in raw_options:
             base_title = str(title_value)
             count = counts.get(base_title, 0)
             label = base_title if count == 0 else f"{base_title} ({count + 1})"
@@ -483,8 +468,6 @@ class _SKUExtractor:
                     "title_value": base_title,
                     "title_label": label,
                     "row_index": row_index,
-                    "sku_display": sku_display,
-                    "sku_original": sku_original,
                 }
             )
         return options
@@ -502,7 +485,7 @@ class _SKUExtractor:
     def _match_client_selection(
         self,
         selection: Any,
-        brand_map: Dict[str, List[tuple[str, int, str, str]]],
+        brand_map: Dict[str, List[tuple[str, int]]],
     ) -> Optional[Dict[str, Any]]:
         if not isinstance(selection, dict):
             return None
@@ -522,7 +505,7 @@ class _SKUExtractor:
         self,
         client_brand: str,
         brands: List[str],
-        brand_map: Dict[str, List[tuple[str, int, str, str]]],
+        brand_map: Dict[str, List[tuple[str, int]]],
         state: Dict[str, Any],
         *,
         show_messages: bool,
@@ -540,7 +523,7 @@ class _SKUExtractor:
                 st.warning("No competitor brands available for comparison.")
             return None
         brand_groups, competitor_options = self._build_competitor_catalog(
-            competitor_brands, brand_map, state["dataframe"]
+            competitor_brands, brand_map
         )
         if not competitor_options:
             state["competitor_options"] = []
@@ -567,7 +550,7 @@ class _SKUExtractor:
     def _build_competitor_catalog(
         self,
         competitor_brands: List[str],
-        brand_map: Dict[str, List[tuple[str, int, str, str]]],
+        brand_map: Dict[str, List[tuple[str, int]]],
     ) -> tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
         brand_groups: List[Dict[str, Any]] = []
         flat_options: List[Dict[str, Any]] = []
@@ -584,8 +567,6 @@ class _SKUExtractor:
                     "row_index": record["row_index"],
                     "ordinal": global_counter,
                     "brand_option_ordinal": option_idx,
-                    "sku_display": record.get("sku_display"),
-                    "sku_original": record.get("sku_original"),
                 }
                 brand_options.append(option)
                 flat_options.append(option)
@@ -650,16 +631,6 @@ class _SKUExtractor:
         title_label = "" if pd.isna(title_value) else str(title_value).strip()
         if not title_label:
             title_label = str(row.iloc[0].get("_display_sku", "")).strip()
-        sku_display = str(row.iloc[0].get("_display_sku", "")).strip()
-        sku_col = column_map.get("sku_col")
-        if sku_col and sku_col in row.columns:
-            sku_original_val = row.iloc[0][sku_col]
-            if pd.isna(sku_original_val):
-                sku_original = ""
-            else:
-                sku_original = str(sku_original_val).strip()
-        else:
-            sku_original = ""
         return {
             "brand": resolved_brand or selection.get("brand"),
             "row_index": row_index,
@@ -667,8 +638,6 @@ class _SKUExtractor:
             "title_value": str(title_value).strip()
             if not pd.isna(title_value)
             else title_label,
-            "sku_display": sku_display,
-            "sku_original": sku_original,
         }
 
     def _record_from_row(
