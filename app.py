@@ -1492,7 +1492,9 @@ if not issues_gaps_sections:
         "**All clear**\n- No rule violations or competitive gaps detected."
     )
 
-issues_gaps_message = "\n\n".join(issues_gaps_sections)
+issues_gaps_intro = "I am going to highlight the Issues and gaps:"
+issues_gaps_body = "\n\n".join(issues_gaps_sections)
+issues_gaps_message = f"{issues_gaps_intro}\n\n{issues_gaps_body}".strip()
 
 chat_history_key = "issues_gaps_chat_history"
 stop_key = "issues_gaps_stop"
