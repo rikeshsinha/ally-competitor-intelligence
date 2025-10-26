@@ -396,21 +396,24 @@ def _match_auto_candidate_to_option(candidate: Dict[str, Any]) -> Optional[Dict[
     return None
 
 
-def _render_competitor_mode_prompt() -> None:
+def _render_competitor_mode_prompt(*, key_namespace: str = "competitor_mode") -> None:
     mode = st.session_state.get("competitor_selection_mode")
-    if mode not in {"manual", "auto"}:
-        st.session_state["competitor_selection_mode"] = "manual"
-        mode = "manual"
 
     with st.chat_message("assistant"):
         st.markdown("How should Ally line up the competitor SKU for this matchup?")
         if mode == "auto":
             st.caption("Current mode: Ally is auto-scouting competitors for you.")
-        else:
+        elif mode == "manual":
             st.caption("Current mode: You're hand-picking the competitor and Ally will follow your lead.")
+        else:
+            st.caption("Pick a mode to continue.")
         manual_col, auto_col = st.columns(2)
-        manual_clicked = manual_col.button("I'll pick the competitor", key="competitor_mode_manual")
-        auto_clicked = auto_col.button("Find best competitor", key="competitor_mode_auto")
+        manual_clicked = manual_col.button(
+            "I'll pick the competitor", key=f"{key_namespace}_manual"
+        )
+        auto_clicked = auto_col.button(
+            "Find best competitor", key=f"{key_namespace}_auto"
+        )
     if manual_clicked:
         _clear_auto_competitor_state()
         _set_competitor_selection_mode("manual")
@@ -696,12 +699,15 @@ def _render_client_selection_ui() -> Optional[Dict[str, Any]]:
         _trigger_rerun()
 
     if final_selection and st.session_state.get("client_chat_confirmed"):
-        _render_competitor_mode_prompt()
+        _render_competitor_mode_prompt(key_namespace="competitor_mode_chat")
 
     return final_selection
 
 
 def _render_competitor_selection_ui() -> Optional[Dict[str, Any]]:
+    if st.session_state.get("competitor_selection_mode") != "manual":
+        return st.session_state.get("selected_competitor")
+
     choices = st.session_state.get("competitor_choices")
     if not isinstance(choices, dict):
         return st.session_state.get("selected_competitor")
@@ -1271,10 +1277,14 @@ if st.session_state.get("client_choices") and not st.session_state.get(
 ):
     st.stop()
 
-mode = st.session_state.get("competitor_selection_mode") or "manual"
+mode = st.session_state.get("competitor_selection_mode")
+if mode not in {"manual", "auto"}:
+    _render_competitor_mode_prompt(key_namespace="competitor_mode_main")
+    st.stop()
+
 if mode == "auto":
     _render_auto_competitor_selection_ui()
-else:
+elif mode == "manual":
     _render_competitor_selection_ui()
 
 if st.session_state.get("competitor_choices") and not st.session_state.get(
