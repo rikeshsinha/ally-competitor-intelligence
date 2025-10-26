@@ -15,6 +15,7 @@ from core.content_rules import (
     compare_fields,
     enforce_title_caps,
     extract_image_urls,
+    limit_text_with_sentence_guard,
     split_bullets,
 )
 from graph.product_validation import build_product_validation_graph
@@ -233,15 +234,26 @@ def _build_final_outputs(
     desc_max: int,
 ) -> Tuple[str, str]:
     """Assemble the final Markdown/email strings for downloads."""
+    title_text = limit_text_with_sentence_guard(
+        str(variant.get("title_edit", "")),
+        title_max,
+        prefer_sentence=False,
+    )
+    desc_text = limit_text_with_sentence_guard(
+        str(variant.get("description_edit", "")),
+        desc_max,
+        prefer_sentence=True,
+    )
+
     final_md: List[str] = []
     final_md.append(f"# Final Content — Client SKU {client_data['sku']}")
     final_md.append("\n## Title (proposed)\n")
-    final_md.append(str(variant.get("title_edit", "")))
+    final_md.append(title_text)
     final_md.append("\n## Bullets (proposed)\n")
     for b in variant.get("bullets_edits", [])[:bullet_max]:
         final_md.append(f"- {re.sub(r'[.!?]+$', '', str(b)).strip()}")
     final_md.append("\n\n## Description (proposed)\n")
-    final_md.append(str(variant.get("description_edit", ""))[:desc_max])
+    final_md.append(desc_text)
 
     final_md.append("\n\n## Rationale & Rule Compliance\n")
     final_md.append(
@@ -275,7 +287,7 @@ Please find the approved PDP content updates for SKU {client_data["sku"]} below.
 
 Title
 -----
-{str(variant.get("title_edit", ""))}
+{title_text}
 
 Bullets
 -------
@@ -283,7 +295,7 @@ Bullets
 
 Description
 ----------
-{str(variant.get("description_edit", ""))[:desc_max]}
+{desc_text}
 
 Rationale
 ---------
@@ -1017,13 +1029,23 @@ def call_llm(
             title = f"{base_brand} " + raw_title
         else:
             title = raw_title
-        title = enforce_title_caps(title)[: rules["title"]["max_chars"]].strip()
+        title = enforce_title_caps(title)
+        title = limit_text_with_sentence_guard(
+            title,
+            rules["title"].get("max_chars", len(title)),
+            prefer_sentence=False,
+        )
 
         # Description heuristic: keep client description if present, otherwise reuse bullet text
         desc = (client_data.get("description") or "").strip()
         if not desc and fixed_bullets:
             desc = " ".join(fixed_bullets)
-        desc = re.sub(r"\s+", " ", desc)[: rules["description"]["max_chars"]].strip()
+        desc = re.sub(r"\s+", " ", desc).strip()
+        desc = limit_text_with_sentence_guard(
+            desc,
+            rules["description"].get("max_chars", len(desc)),
+            prefer_sentence=True,
+        )
 
         variant = {
             "title_edit": title,
@@ -1116,17 +1138,21 @@ def call_llm(
     except Exception as e:
         # Fallback to heuristic
         variant = {
-            "title_edit": enforce_title_caps(
-                (client_data.get("title") or "")[: rules["title"]["max_chars"]]
+            "title_edit": limit_text_with_sentence_guard(
+                enforce_title_caps(client_data.get("title") or ""),
+                rules["title"].get("max_chars", 0),
+                prefer_sentence=False,
             ),
             "bullets_edits": [
                 "Durable construction",
                 "Comfortable fit",
                 "Easy to clean",
             ],
-            "description_edit": "Compact design for everyday use; easy to clean; ideal for most pets"[
-                : rules["description"]["max_chars"]
-            ],
+            "description_edit": limit_text_with_sentence_guard(
+                "Compact design for everyday use; easy to clean; ideal for most pets",
+                rules["description"].get("max_chars", 0),
+                prefer_sentence=True,
+            ),
             "rationales": ["LLM error; generated heuristic placeholders"],
         }
         response: Dict[str, Any] = {"variants": [variant], "_llm": False}
@@ -1874,7 +1900,13 @@ if "llm_out" in st.session_state:
             for idx, variant in enumerate(variants):
                 st.markdown(f"### Variant {idx + 1}")
                 st.markdown("**Proposed Title**")
-                st.code(str(variant.get("title_edit", ""))[:title_max])
+                st.code(
+                    limit_text_with_sentence_guard(
+                        str(variant.get("title_edit", "")),
+                        title_max,
+                        prefer_sentence=False,
+                    )
+                )
 
                 st.markdown(f"**Proposed Bullets (up to {bullet_max})**")
                 for b in variant.get("bullets_edits", [])[:bullet_max]:
@@ -1882,7 +1914,13 @@ if "llm_out" in st.session_state:
                     st.write(f"• {re.sub(r'[.!?]+$', '', bullet_text).strip()}")
 
                 st.markdown(f"**Proposed Description (<= {desc_max} chars)**")
-                st.code(str(variant.get("description_edit", ""))[:desc_max])
+                st.code(
+                    limit_text_with_sentence_guard(
+                        str(variant.get("description_edit", "")),
+                        desc_max,
+                        prefer_sentence=True,
+                    )
+                )
 
                 rationales = variant.get("rationales", [])
                 if rationales:
@@ -1936,14 +1974,26 @@ if "llm_out" in st.session_state:
         else:
             selected_variant = variants[0]
             st.markdown("**Proposed Title**")
-            st.code(str(selected_variant.get("title_edit", ""))[:title_max])
+            st.code(
+                limit_text_with_sentence_guard(
+                    str(selected_variant.get("title_edit", "")),
+                    title_max,
+                    prefer_sentence=False,
+                )
+            )
 
             st.markdown(f"**Proposed Bullets (up to {bullet_max})**")
             for b in selected_variant.get("bullets_edits", [])[:bullet_max]:
                 st.write(f"• {re.sub(r'[.!?]+$', '', str(b)).strip()}")
 
             st.markdown(f"**Proposed Description (<= {desc_max} chars)**")
-            st.code(str(selected_variant.get("description_edit", ""))[:desc_max])
+            st.code(
+                limit_text_with_sentence_guard(
+                    str(selected_variant.get("description_edit", "")),
+                    desc_max,
+                    prefer_sentence=True,
+                )
+            )
 
             rationales = selected_variant.get("rationales", [])
             if rationales:
