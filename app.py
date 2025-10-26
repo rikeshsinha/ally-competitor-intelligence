@@ -1601,34 +1601,19 @@ if user_reply:
                     st.markdown(answer_text)
 
         elif action == "find_competitors":
-            recommendations = find_similar_competitors(sku_data)
-            st.session_state["issues_gaps_found_competitors"] = recommendations
-            if recommendations:
-                lines = [
-                    "Here are some similar competitor SKUs I found:",
-                    "",
-                ]
-                for idx, rec in enumerate(recommendations, start=1):
-                    rank_value = rec.get("rank")
-                    if isinstance(rank_value, (int, float)) and math.isfinite(rank_value):
-                        rank_display = f"{rank_value:g}"
-                    else:
-                        rank_display = "N/A"
-                    lines.append(
-                        (
-                            f"{idx}. {rec.get('brand') or '—'} — {rec.get('title') or 'Untitled'} "
-                            f"(SKU: {rec.get('sku') or '—'}, search rank: {rank_display})"
-                        )
-                    )
-                message = "\n".join(lines)
-            else:
-                message = (
-                    "I couldn't find any similar competitors right now, but we can keep going "
-                    "with the review."
-                )
+            _clear_competitor_selection_state(keep_choices=True)
+            st.session_state.pop("issues_gaps_found_competitors", None)
+            st.session_state.pop("orchestrator_additional_products", None)
+
+            message = (
+                "Let's revisit the competitor selection. Choose how to pick the competitor SKU "
+                "using the options above."
+            )
             chat_history.append({"role": "assistant", "content": message})
             with st.chat_message("assistant"):
                 st.markdown(message)
+
+            _trigger_rerun()
 
         elif action == "stop":
             st.session_state[stop_key] = True
