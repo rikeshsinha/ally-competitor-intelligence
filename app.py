@@ -403,11 +403,11 @@ def _render_competitor_mode_prompt() -> None:
         mode = "manual"
 
     with st.chat_message("assistant"):
-        st.markdown("How should we pick the competitor SKU?")
+        st.markdown("How should Ally line up the competitor SKU for this matchup?")
         if mode == "auto":
-            st.caption("Currently: I'll recommend competitors for you.")
+            st.caption("Current mode: Ally is auto-scouting competitors for you.")
         else:
-            st.caption("Currently: You'll choose the competitor manually.")
+            st.caption("Current mode: You're hand-picking the competitor and Ally will follow your lead.")
         manual_col, auto_col = st.columns(2)
         manual_clicked = manual_col.button("I'll pick the competitor", key="competitor_mode_manual")
         auto_clicked = auto_col.button("Find best competitor", key="competitor_mode_auto")
@@ -486,7 +486,7 @@ def _render_auto_competitor_selection_ui() -> Optional[Dict[str, Any]]:
     if not recommendations:
         with st.chat_message("assistant"):
             st.warning(
-                "I couldn't find similar competitors automatically. Please pick one manually."
+                "Ally couldn't spot a close competitor automatically. Give manual mode a whirl instead."
             )
         return None
 
@@ -495,7 +495,9 @@ def _render_auto_competitor_selection_ui() -> Optional[Dict[str, Any]]:
     confirmed_idx = st.session_state.get("auto_competitor_confirmed_index")
 
     with st.chat_message("assistant"):
-        st.markdown("Here are the closest competitors I found. Select one to compare:")
+        st.markdown(
+            "Ally's shortlist of lookalike competitors is ready—choose your challenger to compare."
+        )
         selected_option = st.selectbox(
             "Select an automatically suggested competitor",
             options=choice_options,
@@ -535,10 +537,10 @@ def _render_auto_competitor_selection_ui() -> Optional[Dict[str, Any]]:
         competitor_label = final_selection.get("label")
         if competitor_label:
             confirmation_text = (
-                f"Using **{competitor_brand} — {competitor_label}** as the competitor."
+                f"Locked in **{competitor_brand} — {competitor_label}** as the competitor."
             )
         else:
-            confirmation_text = f"Using **{competitor_brand}** as the competitor."
+            confirmation_text = f"Locked in **{competitor_brand}** as the competitor."
         with st.chat_message("assistant"):
             st.markdown(confirmation_text)
 
@@ -574,7 +576,7 @@ def _render_client_selection_ui() -> Optional[Dict[str, Any]]:
         brand_index = brand_groups_with_placeholder.index(current_brand_record)
 
     with st.chat_message("assistant"):
-        st.markdown("Let's pick the client brand you'd like to optimize:")
+        st.markdown("Let's choose the client brand Ally should polish up:")
         selected_brand_option = st.selectbox(
             "Select a client brand",
             options=brand_groups_with_placeholder,
@@ -629,7 +631,7 @@ def _render_client_selection_ui() -> Optional[Dict[str, Any]]:
 
         with st.chat_message("assistant"):
             st.markdown(
-                f"Now pick the client product from **{brand_record.get('brand', 'this brand')}** to optimize:"
+                f"Now pick which **{brand_record.get('brand', 'this brand')}** product Ally should glow-up next:"
             )
             selected_product_option = st.selectbox(
                 "Select a client product",
@@ -682,10 +684,10 @@ def _render_client_selection_ui() -> Optional[Dict[str, Any]]:
         product_label = final_selection.get("label")
         if product_label:
             confirmation_text = (
-                f"Great! We'll optimize **{brand_label} — {product_label}**."
+                f"Fantastic! Ally is on **{brand_label} — {product_label}** duty."
             )
         else:
-            confirmation_text = f"Great! We'll optimize **{brand_label}**."
+            confirmation_text = f"Fantastic! Ally is on **{brand_label}** duty."
         with st.chat_message("assistant"):
             st.markdown(confirmation_text)
 
@@ -729,7 +731,9 @@ def _render_competitor_selection_ui() -> Optional[Dict[str, Any]]:
     if current_selection and not st.session_state.get("competitor_chat_confirmed"):
         matched_option = _get_option_for_selection(current_selection, options)
         if matched_option:
-            confirmation = f"Using **{matched_option['brand']} — {matched_option['title_label']}** as the competitor."
+            confirmation = (
+                f"Locked in **{matched_option['brand']} — {matched_option['title_label']}** as the competitor."
+            )
         else:
             confirmation = "Using your previously selected competitor."
         st.session_state["competitor_chat_confirmed"] = True
@@ -744,7 +748,7 @@ def _render_competitor_selection_ui() -> Optional[Dict[str, Any]]:
         brand_index = brand_groups_with_placeholder.index(current_brand_record)
 
     with st.chat_message("assistant"):
-        st.markdown("First, choose which competitor brand you'd like to review:")
+        st.markdown("First up, pick the competitor brand Ally should scout:")
         selected_brand_option = st.selectbox(
             "Select a competitor brand",
             options=brand_groups_with_placeholder,
@@ -809,7 +813,7 @@ def _render_competitor_selection_ui() -> Optional[Dict[str, Any]]:
 
         with st.chat_message("assistant"):
             st.markdown(
-                f"Now pick the product from **{brand_record.get('brand', 'this brand')}** you'd like to use as the competitor:"
+                f"Next, choose which **{brand_record.get('brand', 'this brand')}** product Ally should stack up against your client:"
             )
             selected_product_option = st.selectbox(
                 "Select a competitor product",
@@ -858,10 +862,10 @@ def _render_competitor_selection_ui() -> Optional[Dict[str, Any]]:
         competitor_label = final_selection.get("label")
         if competitor_label:
             confirmation_text = (
-                f"Using **{competitor_brand} — {competitor_label}** as the competitor."
+                f"Locked in **{competitor_brand} — {competitor_label}** as the competitor."
             )
         else:
-            confirmation_text = f"Using **{competitor_brand}** as the competitor."
+            confirmation_text = f"Locked in **{competitor_brand}** as the competitor."
         with st.chat_message("assistant"):
             st.markdown(confirmation_text)
 
@@ -1192,12 +1196,19 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-st.title("Competitor Content Intelligence — Ally skill demo")
+st.title("Ally's Competitor Content Intelligence Lab")
+
+if not st.session_state.get("ally_welcome_announced"):
+    with st.chat_message("assistant"):
+        st.markdown(
+            "Hi there! I'm Ally—your upbeat PDP wingmate. Let's turn these listings into standouts together!"
+        )
+    st.session_state["ally_welcome_announced"] = True
 
 with st.expander("About this demo"):
     st.markdown(
-        "This app compares a client SKU to a competitor and drafts compliant edits (title, bullets, description).\n"
-        "Rules encoded from the Amazon Pet Supplies style guide for UAE (title≤50, ≤5 bullets, description≤200, no promo)."
+        "Ally compares your client SKU to a competitor and drafts compliant edits (title, bullets, description) with flair.\n"
+        "Rules stay grounded in the Amazon Pet Supplies style guide for UAE (title≤50, ≤5 bullets, description≤200, no promo)."
     )
 
 # Sidebar: LLM settings
@@ -1531,7 +1542,9 @@ if user_reply:
         st.session_state["issues_gaps_last_action"] = action
 
         if action == "generate_edits":
-            acknowledgement = "Got it — drafting compliant edits based on this review."
+            acknowledgement = (
+                "Copy that! I'm spinning up some rule-hugging sparkle for these edits."
+            )
             chat_history.append({"role": "assistant", "content": acknowledgement})
             with st.chat_message("assistant"):
                 st.markdown(acknowledgement)
@@ -1560,17 +1573,17 @@ if user_reply:
             st.session_state.pop(stop_key, None)
 
             if llm_out.get("_llm"):
-                followup = "Here are the draft edits based on the review. I used the OpenAI model to create them."
+                followup = (
+                    "Ta-da! Fresh from Ally's idea oven (with a dash of OpenAI magic) — check out these draft edits."
+                )
             else:
                 if not st.session_state.get("openai_valid"):
                     followup = (
-                        "Here are the draft edits based on the review. I used the heuristic fallback "
-                        "because no valid OpenAI key is available."
+                        "Ta-da! I whipped these up with Ally's built-in heuristics since we don't have a valid OpenAI key right now."
                     )
                 else:
                     followup = (
-                        "Here are the draft edits based on the review. The OpenAI call failed, so I used "
-                        "the heuristic fallback."
+                        "Ta-da! OpenAI took a rain check, so I jazzed these up with Ally's heuristic toolkit instead."
                     )
             chat_history.append({"role": "assistant", "content": followup})
             with st.chat_message("assistant"):
