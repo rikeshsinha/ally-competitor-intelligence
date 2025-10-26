@@ -174,6 +174,41 @@ def enforce_title_caps(text: str) -> str:
     return " ".join(fixed)
 
 
+def limit_text_with_sentence_guard(
+    text: str,
+    max_chars: int,
+    *,
+    prefer_sentence: bool = True,
+) -> str:
+    """Truncate text without cutting mid-sentence or mid-word."""
+
+    if not isinstance(text, str):
+        return ""
+
+    normalized = re.sub(r"\s+", " ", text).strip()
+    if max_chars <= 0 or len(normalized) <= max_chars:
+        return normalized
+
+    truncated = normalized[:max_chars].rstrip()
+
+    if prefer_sentence:
+        sentence_break = -1
+        for marker in ".!?":
+            idx = truncated.rfind(marker)
+            if idx > sentence_break:
+                sentence_break = idx
+        if sentence_break != -1 and sentence_break >= max(0, max_chars // 2):
+            return truncated[: sentence_break + 1].strip()
+
+    word_break = truncated.rfind(" ")
+    if word_break > 0:
+        candidate = truncated[:word_break].rstrip(",;:-")
+        if candidate:
+            return candidate.strip()
+
+    return truncated.strip()
+
+
 def rule_check_title(
     title: str, brand: str, rules: Dict[str, Any], is_bundle: bool = False
 ) -> Tuple[int, List[str]]:
