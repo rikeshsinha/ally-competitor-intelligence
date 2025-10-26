@@ -1505,14 +1505,28 @@ client_data = getattr(sku_data, "client", {})
 comp_data = getattr(sku_data, "competitor", {})
 
 # Two-column layout for side-by-side comparison
+
+def _normalize_sku_text(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, float) and pd.isna(value):
+        return ""
+    text = str(value).strip()
+    if text.lower() in {"none", "nan"}:
+        return ""
+    return text
+
+
 left, right = st.columns(2)
 with left:
     st.subheader("Client SKU")
-    client_sku_display = client_data.get("sku", "")
-    client_sku_original = client_data.get("sku_original")
-    if client_sku_original and client_sku_original != client_sku_display:
-        client_sku_display = f"{client_sku_display} (original: {client_sku_original})"
-    st.write(f"**SKU**: {client_sku_display or '—'}")
+    client_sku_value = _normalize_sku_text(client_data.get("sku"))
+    client_sku_original = _normalize_sku_text(client_data.get("sku_original"))
+    client_sku_alias = _normalize_sku_text(client_data.get("sku_display"))
+    client_sku_label = client_sku_value or client_sku_original or client_sku_alias
+    if client_sku_alias and client_sku_alias != client_sku_label:
+        client_sku_label = f"{client_sku_label} (list label: {client_sku_alias})"
+    st.write(f"**SKU**: {client_sku_label or '—'}")
     st.write(f"**Brand**: {client_data.get('brand', '')}")
     st.write(f"**Universe**: {client_data.get('universe', '') or '—'}")
     st.write(f"**Title**: {client_data.get('title', '')}")
@@ -1540,11 +1554,13 @@ with left:
 
 with right:
     st.subheader("Competitor SKU")
-    comp_sku_display = comp_data.get("sku", "")
-    comp_sku_original = comp_data.get("sku_original")
-    if comp_sku_original and comp_sku_original != comp_sku_display:
-        comp_sku_display = f"{comp_sku_display} (original: {comp_sku_original})"
-    st.write(f"**SKU**: {comp_sku_display or '—'}")
+    comp_sku_value = _normalize_sku_text(comp_data.get("sku"))
+    comp_sku_original = _normalize_sku_text(comp_data.get("sku_original"))
+    comp_sku_alias = _normalize_sku_text(comp_data.get("sku_display"))
+    comp_sku_label = comp_sku_value or comp_sku_original or comp_sku_alias
+    if comp_sku_alias and comp_sku_alias != comp_sku_label:
+        comp_sku_label = f"{comp_sku_label} (list label: {comp_sku_alias})"
+    st.write(f"**SKU**: {comp_sku_label or '—'}")
     st.write(f"**Brand**: {comp_data.get('brand', '')}")
     st.write(f"**Universe**: {comp_data.get('universe', '') or '—'}")
     st.write(f"**Title**: {comp_data.get('title', '')}")
