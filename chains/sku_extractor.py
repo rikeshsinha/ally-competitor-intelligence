@@ -164,6 +164,17 @@ class _SKUExtractor:
         df = self._load_dataframe(csv_file)
         column_map = self._resolve_columns(df)
         df = self._deduplicate_products(df, column_map)
+        df, removed_count = self._filter_unbranded_products(df, column_map)
+        if df.empty:
+            st.warning(
+                "No products with a named brand remain after filtering. "
+                "Please update your CSV and try again."
+            )
+            st.stop()
+        if removed_count:
+            st.info(
+                f"Skipped {removed_count} product(s) that were missing a brand name."
+            )
         self._show_mapping(column_map)
 
         brands, brand_map = self._build_sku_list(df, column_map)
@@ -212,6 +223,34 @@ class _SKUExtractor:
 
         st.session_state[self._STATE_KEY] = state
         return state
+
+    def _filter_unbranded_products(
+        self, df: pd.DataFrame, column_map: Dict[str, str]
+    ) -> tuple[pd.DataFrame, int]:
+        if df.empty:
+            return df, 0
+
+        brand_col = column_map["brand_col"]
+        brand_series = df[brand_col]
+
+        def _normalize_brand(value: Any) -> str:
+            if pd.isna(value):
+                return ""
+            normalized = str(value).strip()
+            lowered = normalized.lower()
+            if lowered in {"nan", "none"}:
+                return ""
+            return normalized
+
+        normalized_brands = brand_series.map(_normalize_brand)
+        valid_mask = normalized_brands.astype(bool) & (
+            normalized_brands.str.lower() != "unnamed brand"
+        )
+
+        filtered = df.loc[valid_mask].copy()
+        filtered[brand_col] = normalized_brands[valid_mask]
+        removed_count = int((~valid_mask).sum())
+        return filtered, removed_count
 
     def _load_dataframe(self, csv_file) -> pd.DataFrame:
         if csv_file is not None:
