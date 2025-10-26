@@ -199,6 +199,98 @@ def _clear_auto_competitor_state() -> None:
         st.session_state.pop(key, None)
 
 
+def _handle_variant_checkbox_selection(index: int) -> None:
+    """Ensure only a single LLM variant checkbox remains selected."""
+    key = f"variant_accept_{index}"
+    checked = st.session_state.get(key, False)
+    if checked:
+        st.session_state["selected_variant_index"] = index
+        variants = st.session_state.get("llm_out", []) or []
+        for idx in range(len(variants)):
+            if idx == index:
+                continue
+            other_key = f"variant_accept_{idx}"
+            if st.session_state.get(other_key):
+                st.session_state[other_key] = False
+    else:
+        if st.session_state.get("selected_variant_index") == index:
+            st.session_state["selected_variant_index"] = None
+
+
+def _build_final_outputs(
+    variant: Dict[str, Any],
+    client_data: Dict[str, Any],
+    rules: Dict[str, Any],
+    *,
+    title_max: int,
+    bullet_max: int,
+    desc_max: int,
+) -> Tuple[str, str]:
+    """Assemble the final Markdown/email strings for downloads."""
+    final_md: List[str] = []
+    final_md.append(f"# Final Content — Client SKU {client_data['sku']}")
+    final_md.append("\n## Title (proposed)\n")
+    final_md.append(str(variant.get("title_edit", "")))
+    final_md.append("\n## Bullets (proposed)\n")
+    for b in variant.get("bullets_edits", [])[:bullet_max]:
+        final_md.append(f"- {re.sub(r'[.!?]+$', '', str(b)).strip()}")
+    final_md.append("\n\n## Description (proposed)\n")
+    final_md.append(str(variant.get("description_edit", ""))[:desc_max])
+
+    final_md.append("\n\n## Rationale & Rule Compliance\n")
+    final_md.append(
+        f"- Title ≤ {title_max} chars; "
+        f"{'brand required' if rules['title']['brand_required'] else 'brand optional'}; "
+        f"{'avoid ALL CAPS' if rules['title']['no_all_caps'] else 'ALL CAPS allowed'}; "
+        f"{'no promo language' if rules['title']['no_promo'] else 'promo allowed'}"
+    )
+    final_md.append(
+        f"- Up to {bullet_max} bullets; "
+        f"{'start with capitals' if rules['bullets']['start_capital'] else 'any case allowed'}; "
+        f"{'no ending punctuation' if rules['bullets']['no_end_punct'] else 'ending punctuation allowed'}; "
+        f"{'no promo/seller info' if rules['bullets']['no_promo_or_seller_info'] else 'promo allowed'}"
+    )
+    final_md.append(
+        f"- Description ≤ {desc_max} chars; "
+        f"{'no promo language' if rules['description']['no_promo'] else 'promo allowed'}; "
+        f"{'avoid ALL CAPS' if rules['description']['sentence_caps'] else 'ALL CAPS allowed'}"
+    )
+    for r in variant.get("rationales", []):
+        final_md.append(f"- {r}")
+
+    final_md_str = "\n".join(final_md).strip()
+
+    email_md = f"""
+Subject: Approved PDP Edits for SKU {client_data["sku"]}
+
+Hi team,
+
+Please find the approved PDP content updates for SKU {client_data["sku"]} below. These adhere to the style guide (title≤{title_max}, ≤{bullet_max} bullets, description≤{desc_max}; no promo/seller info when restricted).
+
+Title
+-----
+{str(variant.get("title_edit", ""))}
+
+Bullets
+-------
+{chr(10).join([f"- {re.sub(r'[.!?]+$', '', str(b)).strip()}" for b in variant.get("bullets_edits", [])[:bullet_max]])}
+
+Description
+----------
+{str(variant.get("description_edit", ""))[:desc_max]}
+
+Rationale
+---------
+- Alignment with style rules; improved specificity vs competitor
+{chr(10).join([f"- {r}" for r in variant.get("rationales", [])])}
+
+Thanks,
+Ally (Competitor Content Intelligence)
+""".strip()
+
+    return final_md_str, email_md
+
+
 def _clear_client_selection_state(
     *, keep_choices: bool = True, reset_version: bool = False, clear_widget_keys: bool = False
 ) -> None:
@@ -1630,7 +1722,9 @@ if user_reply:
 
             st.session_state["llm_out"] = variants
             st.session_state["llm_out_meta"] = metadata
-            st.session_state["selected_variant_index"] = 0
+            st.session_state["selected_variant_index"] = (
+                0 if not metadata.get("_llm") else None
+            )
             st.session_state.pop(stop_key, None)
 
             if metadata.get("_llm"):
@@ -1742,34 +1836,25 @@ if "llm_out" in st.session_state:
             "No draft variants are available right now. Try requesting new edits to regenerate suggestions."
         )
     else:
-        variant_labels = []
-        for idx, variant in enumerate(variants):
-            title_preview = str(variant.get("title_edit", "")).strip()
-            if title_preview:
-                title_preview = re.sub(r"\s+", " ", title_preview)
-                title_preview = title_preview[:60] + ("…" if len(title_preview) > 60 else "")
-                variant_labels.append(f"Variant {idx + 1}: {title_preview}")
-            else:
-                variant_labels.append(f"Variant {idx + 1}")
+        if metadata.get("_llm"):
+            valid_indexes = set(range(len(variants)))
+            for key in list(st.session_state.keys()):
+                if not key.startswith("variant_accept_"):
+                    continue
+                try:
+                    idx = int(key.rsplit("_", 1)[1])
+                except (ValueError, IndexError):
+                    continue
+                if idx not in valid_indexes:
+                    st.session_state.pop(key, None)
 
-        default_index = st.session_state.get("selected_variant_index", 0)
-        if not isinstance(default_index, int):
-            default_index = 0
-        if variants:
-            default_index = max(0, min(default_index, len(variants) - 1))
+            selected_index = st.session_state.get("selected_variant_index")
+            if not isinstance(selected_index, int) or not (0 <= selected_index < len(variants)):
+                selected_index = None
+                st.session_state["selected_variant_index"] = None
 
-        selected_index = st.radio(
-            "Select a variant to prepare for approval",
-            options=list(range(len(variants))),
-            index=default_index,
-            format_func=lambda idx: variant_labels[idx],
-            key="selected_variant_index",
-        )
-
-        tabs = st.tabs([f"Variant {i + 1}" for i in range(len(variants))])
-        for idx, tab in enumerate(tabs):
-            with tab:
-                variant = variants[idx]
+            for idx, variant in enumerate(variants):
+                st.markdown(f"### Variant {idx + 1}")
                 st.markdown("**Proposed Title**")
                 st.code(str(variant.get("title_edit", ""))[:title_max])
 
@@ -1787,83 +1872,92 @@ if "llm_out" in st.session_state:
                         for r in rationales:
                             st.write("- ", r)
 
-        st.caption(f"Source: {rules_source}")
-
-        selected_variant = variants[selected_index]
-
-        approved = st.checkbox("I approve the selected variant")
-        if approved:
-            # Final Markdown summary
-            final_md = []
-            final_md.append(f"# Final Content — Client SKU {client_data['sku']}")
-            final_md.append("\n## Title (proposed)\n")
-            final_md.append(str(selected_variant.get("title_edit", "")))
-            final_md.append("\n## Bullets (proposed)\n")
-            for b in selected_variant.get("bullets_edits", [])[:bullet_max]:
-                final_md.append(f"- {re.sub(r'[.!?]+$', '', str(b)).strip()}")
-            final_md.append("\n\n## Description (proposed)\n")
-            final_md.append(str(selected_variant.get("description_edit", ""))[:desc_max])
-
-            final_md.append("\n\n## Rationale & Rule Compliance\n")
-            final_md.append(
-                f"- Title ≤ {title_max} chars; "
-                f"{'brand required' if rules['title']['brand_required'] else 'brand optional'}; "
-                f"{'avoid ALL CAPS' if rules['title']['no_all_caps'] else 'ALL CAPS allowed'}; "
-                f"{'no promo language' if rules['title']['no_promo'] else 'promo allowed'}"
-            )
-            final_md.append(
-                f"- Up to {bullet_max} bullets; {'start with capitals' if rules['bullets']['start_capital'] else 'any case allowed'}; "
-                f"{'no ending punctuation' if rules['bullets']['no_end_punct'] else 'ending punctuation allowed'}; "
-                f"{'no promo/seller info' if rules['bullets']['no_promo_or_seller_info'] else 'promo allowed'}"
-            )
-            final_md.append(
-                f"- Description ≤ {desc_max} chars; "
-                f"{'no promo language' if rules['description']['no_promo'] else 'promo allowed'}; "
-                f"{'avoid ALL CAPS' if rules['description']['sentence_caps'] else 'ALL CAPS allowed'}"
-            )
-            for r in selected_variant.get("rationales", []):
-                final_md.append(f"- {r}")
-
-            final_md_str = "\n".join(final_md).strip()
-            st.markdown("---")
-            st.subheader("Final Markdown")
-            st.code(final_md_str, language="markdown")
-            st.download_button(
-                "Download final.md", final_md_str.encode("utf-8"), file_name="final.md"
-            )
-
-            with st.expander("Email draft to stakeholders"):
-                email_md = f"""
-Subject: Approved PDP Edits for SKU {client_data["sku"]}
-
-Hi team,
-
-Please find the approved PDP content updates for SKU {client_data["sku"]} below. These adhere to the style guide (title≤{title_max}, ≤{bullet_max} bullets, description≤{desc_max}; no promo/seller info when restricted).
-
-Title
------
-{str(selected_variant.get("title_edit", ""))}
-
-Bullets
--------
-{chr(10).join([f"- {re.sub(r'[.!?]+$', '', str(b)).strip()}" for b in selected_variant.get("bullets_edits", [])[:bullet_max]])}
-
-Description
-----------
-{str(selected_variant.get("description_edit", ""))[:desc_max]}
-
-Rationale
----------
-- Alignment with style rules; improved specificity vs competitor
-{chr(10).join([f"- {r}" for r in selected_variant.get("rationales", [])])}
-
-Thanks,
-Ally (Competitor Content Intelligence)
-""".strip()
-                st.code(email_md)
-                st.download_button(
-                    "Download email.txt", email_md.encode("utf-8"), file_name="email.txt"
+                checkbox_key = f"variant_accept_{idx}"
+                if checkbox_key not in st.session_state:
+                    st.session_state[checkbox_key] = selected_index == idx
+                st.checkbox(
+                    "accept this version",
+                    key=checkbox_key,
+                    on_change=_handle_variant_checkbox_selection,
+                    args=(idx,),
                 )
+
+            st.caption(f"Source: {rules_source}")
+
+            final_index = st.session_state.get("selected_variant_index")
+            if (
+                isinstance(final_index, int)
+                and 0 <= final_index < len(variants)
+                and st.session_state.get(f"variant_accept_{final_index}")
+            ):
+                selected_variant = variants[final_index]
+                final_md_str, email_md = _build_final_outputs(
+                    selected_variant,
+                    client_data,
+                    rules,
+                    title_max=title_max,
+                    bullet_max=bullet_max,
+                    desc_max=desc_max,
+                )
+
+                st.markdown("---")
+                st.subheader("Final Markdown")
+                st.code(final_md_str, language="markdown")
+                st.download_button(
+                    "Download final.md", final_md_str.encode("utf-8"), file_name="final.md"
+                )
+
+                with st.expander("Email draft to stakeholders"):
+                    st.code(email_md)
+                    st.download_button(
+                        "Download email.txt", email_md.encode("utf-8"), file_name="email.txt"
+                    )
+            else:
+                st.info("Select a variant to accept and unlock the final downloads.")
+
+        else:
+            selected_variant = variants[0]
+            st.markdown("**Proposed Title**")
+            st.code(str(selected_variant.get("title_edit", ""))[:title_max])
+
+            st.markdown(f"**Proposed Bullets (up to {bullet_max})**")
+            for b in selected_variant.get("bullets_edits", [])[:bullet_max]:
+                st.write(f"• {re.sub(r'[.!?]+$', '', str(b)).strip()}")
+
+            st.markdown(f"**Proposed Description (<= {desc_max} chars)**")
+            st.code(str(selected_variant.get("description_edit", ""))[:desc_max])
+
+            rationales = selected_variant.get("rationales", [])
+            if rationales:
+                with st.expander("Why these edits?", expanded=False):
+                    for r in rationales:
+                        st.write("- ", r)
+
+            st.caption(f"Source: {rules_source}")
+
+            approved = st.checkbox("I approve these edits")
+            if approved:
+                final_md_str, email_md = _build_final_outputs(
+                    selected_variant,
+                    client_data,
+                    rules,
+                    title_max=title_max,
+                    bullet_max=bullet_max,
+                    desc_max=desc_max,
+                )
+
+                st.markdown("---")
+                st.subheader("Final Markdown")
+                st.code(final_md_str, language="markdown")
+                st.download_button(
+                    "Download final.md", final_md_str.encode("utf-8"), file_name="final.md"
+                )
+
+                with st.expander("Email draft to stakeholders"):
+                    st.code(email_md)
+                    st.download_button(
+                        "Download email.txt", email_md.encode("utf-8"), file_name="email.txt"
+                    )
 else:
     st.info(
         "Use the chat below to ask for edits, generate suggested edits, choose another competitor, or wrap up the review."
