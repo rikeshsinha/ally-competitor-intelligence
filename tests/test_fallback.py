@@ -105,7 +105,10 @@ def test_fallback_reuses_client_bullets_and_description_clauses():
         "bullets": "soft cushioning.|Waterproof lining ;  removable cover",
         "description": "Machine washable cover. Provides joint support for older dogs!",
     }
-    response = _call_fallback(client_data)
+    result = _call_fallback(client_data)
+    variants = result.get("variants", [])
+    assert variants, "Expected at least one variant"
+    response = variants[0]
 
     expected_original_bullets = {
         "soft cushioning",
@@ -136,7 +139,10 @@ def test_fallback_handles_missing_bullets_with_description():
         "bullets": "",
         "description": "Durable ripstop material keeps its shape. Collapsible design for easy storage.",
     }
-    response = _call_fallback(client_data)
+    result = _call_fallback(client_data)
+    variants = result.get("variants", [])
+    assert variants, "Expected at least one variant"
+    response = variants[0]
 
     assert response["bullets_edits"], "Expected bullets extracted from description"
     _assert_from_sources(
@@ -156,7 +162,10 @@ def test_fallback_empty_inputs_return_no_new_claims():
         "bullets": "",
         "description": "",
     }
-    response = _call_fallback(client_data)
+    result = _call_fallback(client_data)
+    variants = result.get("variants", [])
+    assert variants, "Expected at least one variant"
+    response = variants[0]
 
     assert response["bullets_edits"] == []
     assert response["description_edit"] == ""
@@ -170,11 +179,14 @@ def test_fallback_context_appends_guidance_block():
         "description": "",
     }
     guidance = "Emphasize ease of use and comfort."
-    response = _call_fallback(client_data, user_context=guidance)
+    result = _call_fallback(client_data, user_context=guidance)
+    variants = result.get("variants", [])
+    assert variants, "Expected at least one variant"
+    response = variants[0]
 
-    assert "user_guidance" in response
-    assert response["user_guidance"].startswith("USER GUIDANCE:\n")
-    assert guidance in response["user_guidance"]
+    guidance_text = result.get("metadata", {}).get("user_guidance")
+    assert guidance_text and guidance_text.startswith("USER GUIDANCE:\n")
+    assert guidance in guidance_text
 
 
 def test_fallback_context_absent_by_default():
@@ -184,6 +196,8 @@ def test_fallback_context_absent_by_default():
         "bullets": "",
         "description": "",
     }
-    response = _call_fallback(client_data)
+    result = _call_fallback(client_data)
+    variants = result.get("variants", [])
+    assert variants, "Expected at least one variant"
 
-    assert "user_guidance" not in response
+    assert "user_guidance" not in result.get("metadata", {})
