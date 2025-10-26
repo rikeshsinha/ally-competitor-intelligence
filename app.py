@@ -58,6 +58,8 @@ from chains.review_assistant import classify_review_followup
 from chains.sku_extractor import (
     COMPETITOR_SELECTION_SESSION_KEYS,
     CLIENT_SELECTION_SESSION_KEYS,
+    SKUData,
+    _SKUExtractor,
     prime_competitor_chat_state,
 )
 from chains.competitor_finder import find_similar_competitors
@@ -214,6 +216,20 @@ _CLIENT_SELECTION_RESET_KEYS = tuple(
 )
 
 
+_AUTO_COMPETITOR_SESSION_KEYS = (
+    "auto_competitor_recommendations",
+    "auto_competitor_choice",
+    "auto_competitor_confirmed_index",
+    "auto_competitor_reference",
+    "auto_competitor_error",
+)
+
+
+def _clear_auto_competitor_state() -> None:
+    for key in _AUTO_COMPETITOR_SESSION_KEYS:
+        st.session_state.pop(key, None)
+
+
 def _clear_client_selection_state(
     *, keep_choices: bool = True, reset_version: bool = False, clear_widget_keys: bool = False
 ) -> None:
@@ -234,17 +250,299 @@ def _clear_client_selection_state(
                 st.session_state.pop(key, None)
 
 
-def _clear_competitor_selection_state() -> None:
+def _clear_competitor_selection_state(*, keep_choices: bool = False) -> None:
     product_key = st.session_state.pop("competitor_product_select_key", None)
     if product_key:
         st.session_state.pop(product_key, None)
+    competitor_choices = (
+        st.session_state.get("competitor_choices") if keep_choices else None
+    )
     for key in COMPETITOR_SELECTION_SESSION_KEYS:
+        if keep_choices and key == "competitor_choices":
+            continue
         st.session_state.pop(key, None)
     for key in list(st.session_state.keys()):
         if key.startswith("competitor_brand_select_") or key.startswith(
             "competitor_product_select_"
         ):
             st.session_state.pop(key, None)
+    _clear_auto_competitor_state()
+    if keep_choices and competitor_choices is not None:
+        st.session_state["competitor_choices"] = competitor_choices
+
+
+def _set_competitor_selection_mode(mode: str) -> None:
+    normalized = mode.strip().lower()
+    current = st.session_state.get("competitor_selection_mode")
+    if current == normalized:
+        return
+    _clear_competitor_selection_state(keep_choices=True)
+    if normalized not in {"manual", "auto"}:
+        st.session_state.pop("competitor_selection_mode", None)
+        return
+    st.session_state["competitor_selection_mode"] = normalized
+    _trigger_rerun()
+
+
+def _format_auto_competitor_option(
+    idx: int, recommendations: List[Dict[str, Any]]
+) -> str:
+    if idx < 0 or idx >= len(recommendations):
+        return "Select a recommended competitor"
+    candidate = recommendations[idx]
+    brand = str(candidate.get("brand", "")).strip() or "Unnamed brand"
+    title = str(candidate.get("title", "")).strip() or "Untitled product"
+    parts = [f"{brand} — {title}"]
+    similarity = candidate.get("similarity")
+    extras: List[str] = []
+    if isinstance(similarity, (int, float)):
+        try:
+            extras.append(f"{similarity * 100:.1f}% match")
+        except Exception:
+            pass
+    rank_value = candidate.get("rank")
+    if isinstance(rank_value, (int, float)) and math.isfinite(float(rank_value)):
+        if isinstance(rank_value, float) and not rank_value.is_integer():
+            rank_display = f"Avg rank {rank_value:.1f}"
+        else:
+            rank_display = f"Avg rank {int(round(rank_value))}"
+        extras.append(rank_display)
+    if extras:
+        parts.append(f"({' • '.join(extras)})")
+    return " ".join(parts)
+
+
+def _build_sku_data_for_auto() -> Optional[SKUData]:
+    state = st.session_state.get("_sku_extractor_state")
+    if not isinstance(state, dict):
+        return None
+    df = state.get("dataframe")
+    column_map = state.get("column_map")
+    client_idx = state.get("client_row_index")
+    if not isinstance(client_idx, int) or client_idx < 0:
+        selected_client = st.session_state.get("selected_client")
+        client_idx = (
+            selected_client.get("row_index")
+            if isinstance(selected_client, dict)
+            else None
+        )
+    if not isinstance(client_idx, int) or client_idx < 0:
+        return None
+    if df is None or column_map is None:
+        return None
+    if client_idx >= len(df):
+        return None
+    extractor = _SKUExtractor()
+    client_row = df.iloc[[client_idx]]
+    client_record = extractor._record_from_row(client_row, column_map)
+    client_record["row_index"] = client_idx
+    return SKUData(
+        dataframe=df,
+        column_map=column_map,
+        client=client_record,
+        competitor={},
+    )
+
+
+def _match_auto_candidate_to_option(candidate: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    choices = st.session_state.get("competitor_choices")
+    if not isinstance(choices, dict):
+        return None
+    options: List[Dict[str, Any]] = choices.get("options") or []
+    if not options:
+        return None
+    state = st.session_state.get("_sku_extractor_state")
+    df = state.get("dataframe") if isinstance(state, dict) else None
+    column_map = state.get("column_map") if isinstance(state, dict) else None
+    candidate_brand = str(candidate.get("brand", "")).strip().lower()
+    candidate_title = str(candidate.get("title", "")).strip().lower()
+    candidate_sku = str(candidate.get("sku", "")).strip()
+
+    def _option_matches(option: Dict[str, Any]) -> bool:
+        brand = str(option.get("brand", "")).strip().lower()
+        if candidate_brand and brand != candidate_brand:
+            return False
+        title_value = str(option.get("title_value", "")).strip().lower()
+        if candidate_title and title_value == candidate_title:
+            return True
+        row_index = option.get("row_index")
+        if (
+            df is not None
+            and column_map
+            and isinstance(row_index, int)
+            and 0 <= row_index < len(df)
+        ):
+            row = df.iloc[row_index]
+            sku_col = column_map.get("sku_col")
+            possible_skus: List[str] = []
+            if sku_col and sku_col in df.columns:
+                possible_skus.append(str(row.get(sku_col, "")).strip())
+            if "_display_sku" in df.columns:
+                possible_skus.append(str(row.get("_display_sku", "")).strip())
+            if candidate_sku and candidate_sku in possible_skus:
+                return True
+        return False
+
+    for option in options:
+        if _option_matches(option):
+            return option
+
+    if candidate_brand:
+        for option in options:
+            brand = str(option.get("brand", "")).strip().lower()
+            if brand == candidate_brand:
+                return option
+
+    return None
+
+
+def _render_competitor_mode_prompt() -> None:
+    mode = st.session_state.get("competitor_selection_mode")
+    if mode not in {"manual", "auto"}:
+        st.session_state["competitor_selection_mode"] = "manual"
+        mode = "manual"
+
+    with st.chat_message("assistant"):
+        st.markdown("How should we pick the competitor SKU?")
+        if mode == "auto":
+            st.caption("Currently: I'll recommend competitors for you.")
+        else:
+            st.caption("Currently: You'll choose the competitor manually.")
+        manual_col, auto_col = st.columns(2)
+        manual_clicked = manual_col.button("I'll pick the competitor", key="competitor_mode_manual")
+        auto_clicked = auto_col.button("Find best competitor", key="competitor_mode_auto")
+    if manual_clicked:
+        _clear_auto_competitor_state()
+        _set_competitor_selection_mode("manual")
+    elif auto_clicked:
+        _set_competitor_selection_mode("auto")
+
+
+def _apply_auto_selection(
+    choice_idx: int, recommendations: List[Dict[str, Any]]
+) -> Optional[Dict[str, Any]]:
+    if choice_idx < 0 or choice_idx >= len(recommendations):
+        return None
+    candidate = recommendations[choice_idx]
+    matched_option = _match_auto_candidate_to_option(candidate)
+    if not matched_option:
+        st.session_state["auto_competitor_error"] = (
+            "Unable to map the suggested competitor to the catalog. Try manual selection."
+        )
+        return None
+
+    st.session_state.pop("auto_competitor_error", None)
+    selection_record = {
+        "brand": matched_option.get("brand"),
+        "row_index": matched_option.get("row_index"),
+        "label": matched_option.get("title_label")
+        or matched_option.get("title_value"),
+        "ordinal": matched_option.get("ordinal")
+        or matched_option.get("brand_option_ordinal"),
+    }
+
+    st.session_state["selected_competitor"] = selection_record
+    brand = selection_record.get("brand")
+    if brand:
+        st.session_state["selected_competitor_brand"] = brand
+        st.session_state["competitor_brand_user_ack"] = brand
+    else:
+        st.session_state.pop("selected_competitor_brand", None)
+        st.session_state.pop("competitor_brand_user_ack", None)
+
+    label = selection_record.get("label")
+    if label and brand:
+        st.session_state["competitor_product_user_ack"] = f"{brand} — {label}"
+    elif label:
+        st.session_state["competitor_product_user_ack"] = label
+    elif brand:
+        st.session_state["competitor_product_user_ack"] = brand
+    else:
+        st.session_state.pop("competitor_product_user_ack", None)
+
+    st.session_state["competitor_chat_confirmed"] = True
+    st.session_state["auto_competitor_confirmed_index"] = choice_idx
+    return selection_record
+
+
+def _render_auto_competitor_selection_ui() -> Optional[Dict[str, Any]]:
+    sku_data = _build_sku_data_for_auto()
+    if sku_data is None:
+        return None
+
+    current_reference = st.session_state.get("auto_competitor_reference")
+    if current_reference != st.session_state.get("selected_client", {}).get("row_index"):
+        _clear_auto_competitor_state()
+
+    recommendations: Optional[List[Dict[str, Any]]] = st.session_state.get(
+        "auto_competitor_recommendations"
+    )
+    if not isinstance(recommendations, list):
+        recommendations = find_similar_competitors(sku_data)
+        st.session_state["auto_competitor_recommendations"] = recommendations
+        st.session_state["auto_competitor_reference"] = st.session_state.get(
+            "selected_client", {}
+        ).get("row_index")
+    if not recommendations:
+        with st.chat_message("assistant"):
+            st.warning(
+                "I couldn't find similar competitors automatically. Please pick one manually."
+            )
+        return None
+
+    choice_key = "auto_competitor_choice"
+    choice_options = [-1] + list(range(len(recommendations)))
+    confirmed_idx = st.session_state.get("auto_competitor_confirmed_index")
+
+    with st.chat_message("assistant"):
+        st.markdown("Here are the closest competitors I found. Select one to compare:")
+        selected_option = st.selectbox(
+            "Select an automatically suggested competitor",
+            options=choice_options,
+            index=choice_options.index(
+                st.session_state.get(choice_key, -1)
+                if st.session_state.get(choice_key, -1) in choice_options
+                else -1
+            ),
+            format_func=lambda idx: _format_auto_competitor_option(idx, recommendations),
+            key=choice_key,
+            label_visibility="collapsed",
+        )
+        error_message = st.session_state.get("auto_competitor_error")
+        if error_message:
+            st.warning(error_message)
+
+    final_selection = st.session_state.get("selected_competitor")
+
+    if selected_option == -1:
+        pass
+    elif selected_option == confirmed_idx and final_selection:
+        pass
+    else:
+        selection_record = _apply_auto_selection(selected_option, recommendations)
+        if selection_record is not None:
+            _trigger_rerun()
+            return selection_record
+        final_selection = st.session_state.get("selected_competitor")
+
+    product_ack = st.session_state.get("competitor_product_user_ack")
+    if product_ack:
+        with st.chat_message("user"):
+            st.markdown(f"Compare against **{product_ack}**.")
+
+    if final_selection and st.session_state.get("competitor_chat_confirmed"):
+        competitor_brand = final_selection.get("brand") or "the selected brand"
+        competitor_label = final_selection.get("label")
+        if competitor_label:
+            confirmation_text = (
+                f"Using **{competitor_brand} — {competitor_label}** as the competitor."
+            )
+        else:
+            confirmation_text = f"Using **{competitor_brand}** as the competitor."
+        with st.chat_message("assistant"):
+            st.markdown(confirmation_text)
+
+    return final_selection
 
 
 def _render_client_selection_ui() -> Optional[Dict[str, Any]]:
@@ -394,6 +692,9 @@ def _render_client_selection_ui() -> Optional[Dict[str, Any]]:
     if previous_selection != final_selection:
         _clear_competitor_selection_state()
         _trigger_rerun()
+
+    if final_selection and st.session_state.get("client_chat_confirmed"):
+        _render_competitor_mode_prompt()
 
     return final_selection
 
@@ -959,7 +1260,11 @@ if st.session_state.get("client_choices") and not st.session_state.get(
 ):
     st.stop()
 
-_render_competitor_selection_ui()
+mode = st.session_state.get("competitor_selection_mode") or "manual"
+if mode == "auto":
+    _render_auto_competitor_selection_ui()
+else:
+    _render_competitor_selection_ui()
 
 if st.session_state.get("competitor_choices") and not st.session_state.get(
     "selected_competitor"

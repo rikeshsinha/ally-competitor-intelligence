@@ -34,6 +34,12 @@ COMPETITOR_SELECTION_SESSION_KEYS: Sequence[str] = (
     "competitor_brand_user_ack",
     "competitor_product_user_ack",
     "competitor_product_select_key",
+    "competitor_selection_mode",
+    "auto_competitor_recommendations",
+    "auto_competitor_choice",
+    "auto_competitor_confirmed_index",
+    "auto_competitor_reference",
+    "auto_competitor_error",
 )
 
 
@@ -72,6 +78,16 @@ class _SKUExtractor:
         brand_map: Dict[str, List[tuple[str, int]]] = state.get("brand_map", {})
         brands: List[str] = state.get("brands", [])
 
+        current_mode = st.session_state.get("competitor_selection_mode")
+        if state.get("mode_snapshot") != current_mode:
+            keys_to_reset = [
+                key
+                for key in COMPETITOR_SELECTION_SESSION_KEYS
+                if key not in {"competitor_choices", "competitor_selection_mode"}
+            ]
+            self._clear_session_state_keys(keys_to_reset)
+            state["mode_snapshot"] = current_mode
+
         client_selection = st.session_state.get("selected_client")
         matched_client = self._match_client_selection(client_selection, brand_map)
         if matched_client is None:
@@ -100,6 +116,12 @@ class _SKUExtractor:
         matched_option = self._match_competitor_selection(
             selection, competitor_options
         )
+        if matched_option is None and isinstance(selection, dict):
+            fallback_option = self._match_competitor_by_index(
+                selection, df, column_map
+            )
+            if fallback_option is not None:
+                matched_option = fallback_option
         if matched_option is None:
             st.stop()
 
@@ -174,6 +196,7 @@ class _SKUExtractor:
             "brands": brands,
             "competitor_options": [],
             "client_row_index": None,
+            "mode_snapshot": st.session_state.get("competitor_selection_mode"),
         }
 
         selected_client = st.session_state.get("selected_client")
@@ -541,6 +564,42 @@ class _SKUExtractor:
             if option["row_index"] == row_index and option["brand"] == brand:
                 return option
         return None
+
+    def _match_competitor_by_index(
+        self,
+        selection: Dict[str, Any],
+        df: pd.DataFrame,
+        column_map: Dict[str, str],
+    ) -> Optional[Dict[str, Any]]:
+        row_index = selection.get("row_index")
+        if not isinstance(row_index, int):
+            return None
+        if row_index < 0 or row_index >= len(df):
+            return None
+        if not column_map:
+            return None
+        row = df.iloc[[row_index]]
+        if row.empty:
+            return None
+        brand_col = column_map.get("brand_col")
+        title_col = column_map.get("title_col")
+        if not brand_col or not title_col:
+            return None
+        brand_value = row.iloc[0][brand_col]
+        fallback_brand = str(selection.get("brand", "")).strip()
+        resolved_brand = fallback_brand or ("" if pd.isna(brand_value) else str(brand_value).strip())
+        title_value = row.iloc[0][title_col]
+        title_label = "" if pd.isna(title_value) else str(title_value).strip()
+        if not title_label:
+            title_label = str(row.iloc[0].get("_display_sku", "")).strip()
+        return {
+            "brand": resolved_brand or selection.get("brand"),
+            "row_index": row_index,
+            "title_label": title_label,
+            "title_value": str(title_value).strip()
+            if not pd.isna(title_value)
+            else title_label,
+        }
 
     def _record_from_row(
         self, row: pd.DataFrame, column_map: Dict[str, str]
