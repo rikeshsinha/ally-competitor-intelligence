@@ -643,24 +643,16 @@ class _SKUExtractor:
     def _record_from_row(
         self, row: pd.DataFrame, column_map: Dict[str, str]
     ) -> Dict[str, Any]:
-        sku_display = ""
-        if "_display_sku" in row.columns:
-            sku_display = str(row.iloc[0]["_display_sku"]).strip()
-        sku_original_series = row[column_map["sku_col"]]
-        sku_original_value = (
+        sku_display = (
+            row.iloc[0]["_display_sku"] if "_display_sku" in row.columns else ""
+        )
+        sku_original_series = row[column_map["sku_col"]].astype(str)
+        sku_original = (
             sku_original_series.iloc[0] if not sku_original_series.empty else ""
         )
-        if pd.isna(sku_original_value):
-            sku_original = ""
-        else:
-            sku_original = str(sku_original_value).strip()
-            if sku_original.lower() in {"", "nan", "none"}:
-                sku_original = ""
-        sku_value = sku_original or sku_display
         record = {
-            "sku": sku_value,
+            "sku": sku_display,
             "sku_original": sku_original,
-            "sku_display": sku_display if sku_display and sku_display != sku_value else "",
             "title": row.iloc[0][column_map["title_col"]],
             "bullets": row.iloc[0][column_map["bullets_col"]],
             "description": row.iloc[0][column_map["desc_col"]],
