@@ -66,14 +66,6 @@ class _SKUExtractor:
             )
             st.stop()
 
-        client_selection_input = inputs.get("client_selection")
-        if isinstance(client_selection_input, dict) and client_selection_input:
-            st.session_state["selected_client"] = client_selection_input
-
-        competitor_selection_input = inputs.get("competitor_selection")
-        if isinstance(competitor_selection_input, dict) and competitor_selection_input:
-            st.session_state["selected_competitor"] = competitor_selection_input
-
         state = st.session_state.get(self._STATE_KEY)
         if state is None:
             state = self._prime_state(csv_file)
