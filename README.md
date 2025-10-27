@@ -7,7 +7,7 @@ A demo skill made with streamlit UI for comparing a client SKU vs. a competitorâ
 - Let you pick a client SKU and a similar competitor SKU for a head-to-head comparison.
 - Run rule checks based on the provided Amazon Pet Supplies style guide.
 - Compare PDP fields (title, bullets, description, images).
-- Use LLM to draft brand- and Amazon-compliant edits for the client SKU (title/bullets/description).
+- Use LLM to draft brand and Amazon-compliant edits for the client SKU (title/bullets/description).
 - Pause for human inputs for any changes and get an approval before finalizing changes.
 - Generate a final Markdown summary and email draft for download once you approve the edits.
 
