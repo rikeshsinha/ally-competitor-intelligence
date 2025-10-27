@@ -108,6 +108,7 @@ Respond with JSON only."""
 
 
 def _read_uploaded_content(file_obj: UploadedContent) -> bytes:
+    """Return raw bytes from either a Streamlit upload or direct byte input."""
     if isinstance(file_obj, bytes):
         return file_obj
     for attr in ("getvalue", "read"):
@@ -122,6 +123,7 @@ def _read_uploaded_content(file_obj: UploadedContent) -> bytes:
 
 
 def _extract_text_from_pdf(pdf_bytes: bytes) -> Tuple[str, List[str]]:
+    """Best-effort PDF text extraction with langchain/PyPDF fallbacks."""
     errors: List[str] = []
     if not pdf_bytes:
         errors.append("Uploaded PDF is empty or unreadable")
@@ -203,6 +205,7 @@ def _extract_text_from_pdf(pdf_bytes: bytes) -> Tuple[str, List[str]]:
 
 
 def _coerce_bool(value: Any, default: bool) -> bool:
+    """Convert loosely-typed values into booleans with a default fallback."""
     if isinstance(value, bool):
         return value
     if isinstance(value, str):
@@ -217,6 +220,7 @@ def _coerce_bool(value: Any, default: bool) -> bool:
 
 
 def _coerce_int(value: Any, default: int) -> int:
+    """Cast a value to int, returning the default on failure."""
     try:
         return int(value)
     except Exception:
@@ -226,6 +230,7 @@ def _coerce_int(value: Any, default: int) -> int:
 def _merge_rules(
     default_rules: Dict[str, Any], candidate: Dict[str, Any]
 ) -> Dict[str, Any]:
+    """Overlay parsed rule data on top of defaults while preserving types."""
     merged = copy.deepcopy(default_rules)
     for section, defaults in default_rules.items():
         cand_section = candidate.get(section)

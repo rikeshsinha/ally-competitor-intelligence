@@ -15,6 +15,8 @@ from chains.sku_extractor import SKUData
 
 @dataclass
 class _Candidate:
+    """Intermediate representation used when ranking competitor products."""
+
     brand: str
     sku: str
     title: str
@@ -24,6 +26,7 @@ class _Candidate:
 
 
 def _coerce_text(value: Any) -> str:
+    """Normalize mixed input types to a stripped string."""
     if value is None:
         return ""
     if isinstance(value, str):
@@ -36,6 +39,7 @@ def _coerce_text(value: Any) -> str:
 
 
 def _normalize_rank(value: Any) -> float:
+    """Convert rank-like inputs to sortable floats with inf as worst case."""
     try:
         number = float(value)
     except (TypeError, ValueError):
@@ -51,6 +55,7 @@ def _gather_candidates(
     *,
     target_sku: str,
 ) -> Iterable[_Candidate]:
+    """Iterate over the catalog and build candidate competitor records."""
     sku_col = column_map["sku_col"]
     title_col = column_map["title_col"]
     bullets_col = column_map["bullets_col"]
@@ -84,6 +89,7 @@ def _gather_candidates(
 
 
 def _score_candidates_with_tfidf(target_text: str, candidates: List[_Candidate]) -> None:
+    """Assign cosine similarity scores between the target and each candidate."""
     if not candidates:
         return
 
@@ -100,6 +106,7 @@ def _score_candidates_with_tfidf(target_text: str, candidates: List[_Candidate])
 
 
 def _extract_terms(text: str) -> List[str]:
+    """Return token and bigram features for lightweight TF-IDF scoring."""
     tokens = re.findall(r"[a-z0-9]+", text.lower())
     if not tokens:
         return []
@@ -109,6 +116,7 @@ def _extract_terms(text: str) -> List[str]:
 
 
 def _compute_idf(documents: List[List[str]]) -> Dict[str, float]:
+    """Compute smoothed inverse document frequency weights."""
     doc_count = len(documents)
     freq: Counter[str] = Counter()
     for terms in documents:
@@ -121,6 +129,7 @@ def _compute_idf(documents: List[List[str]]) -> Dict[str, float]:
 
 
 def _to_tfidf_vector(terms: List[str], idf: Dict[str, float]) -> Dict[str, float]:
+    """Convert a token list to a normalized TF-IDF vector mapping."""
     counts = Counter(terms)
     total = sum(counts.values())
     if total == 0:
@@ -130,6 +139,7 @@ def _to_tfidf_vector(terms: List[str], idf: Dict[str, float]) -> Dict[str, float
 
 
 def _cosine_similarity(vec_a: Dict[str, float], vec_b: Dict[str, float]) -> float:
+    """Return the cosine similarity between two sparse TF-IDF vectors."""
     if not vec_a or not vec_b:
         return 0.0
 

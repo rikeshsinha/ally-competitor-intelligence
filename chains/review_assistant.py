@@ -58,6 +58,7 @@ class _LLMResponseError(RuntimeError):
 
 
 def _heuristic_classification(summary: str, user_input: str) -> Action:
+    """Infer the next action using keyword heuristics when LLM calls fail."""
     text = (user_input or "").strip()
     if not text:
         return "clarify"
