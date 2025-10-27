@@ -1,0 +1,278 @@
+{
+  "rules": {
+    "title": {
+      "max_chars": 50,
+      "brand_required": true,
+      "capitalize_words": true,
+      "no_all_caps": true,
+      "no_promo": true,
+      "allow_pack_of": true
+    },
+    "bullets": {
+      "max_count": 5,
+      "start_capital": true,
+      "sentence_fragments": false,
+      "no_end_punct": true,
+      "no_promo_or_seller_info": true,
+      "numbers_as_numerals": true,
+      "semicolons_ok": false
+    },
+    "description": {
+      "max_chars": 2000,
+      "no_promo": true,
+      "no_seller_info": true,
+      "sentence_caps": true,
+      "truthful_claims": true
+    },
+    "images": {
+      "min_count": 1,
+      "preferred_min_px": 1000,
+      "white_bg_required": true,
+      "no_text_watermarks": true
+    }
+  },
+  "cases": [
+    {
+      "name": "title_brand_promo_pack_check",
+      "client": {
+        "title": "Ultimate Salmon Dog Food Value Sale Pack of 6",
+        "bullets": [
+          "High protein kibble",
+          "Supports joint health"
+        ],
+        "description": "Premium salmon kibble for adult dogs.",
+        "image_urls": [
+          "https://example.com/dogfood1.jpg"
+        ],
+        "brand": "PetPrime"
+      },
+      "competitor": {
+        "title": "PetPrime Ultimate Salmon Dinner for Adult Dogs",
+        "bullets": [
+          "High Protein Formula",
+          "Joint Support"
+        ],
+        "description": "Complete salmon meal for adult dogs with omega-3 support.",
+        "image_urls": [
+          "https://example.com/dogfood_comp1.jpg"
+        ]
+      },
+      "expected": {
+        "title": {
+          "client_len": 45,
+          "comp_len": 46,
+          "client_score": 60,
+          "issues": [
+            "Brand name is missing from title",
+            "Remove promotional language in title",
+            "'(pack of X)' should only be used for bundles; verify correctness"
+          ]
+        },
+        "bullets": {
+          "client_count": 2,
+          "comp_count": 2,
+          "client_score": 100,
+          "issues": []
+        },
+        "description": {
+          "client_len": 37,
+          "comp_len": 57,
+          "client_score": 100,
+          "issues": []
+        },
+        "images": {
+          "client_count": 1,
+          "comp_count": 1,
+          "issues": []
+        },
+        "gaps_vs_competitor": [
+          "Competitor title may include more attributes (e.g., size/material/use-case)",
+          "Add a concise use-case/benefit sentence in the description (<= 200 chars)"
+        ]
+      }
+    },
+    {
+      "name": "bullet_capitalization_and_count",
+      "client": {
+        "title": "PetPrime Salmon Bites for Dogs",
+        "bullets": [
+          "packed with omega-3.",
+          "Supports heart health.",
+          "Discount available now",
+          "Gentle on sensitive stomachs.",
+          "Made in usa.",
+          "Extra crunch texture"
+        ],
+        "description": "Tasty salmon bites crafted for picky eaters.",
+        "image_urls": [
+          "https://example.com/bites1.jpg"
+        ],
+        "brand": "PetPrime"
+      },
+      "competitor": {
+        "title": "PetPrime Salmon Bites for Dogs",
+        "bullets": [
+          "Packed With Omega-3",
+          "Supports Joint Flexibility",
+          "Gentle On Sensitive Stomachs",
+          "Made In USA",
+          "Crunchy Texture"
+        ],
+        "description": "Crunchy salmon bites with omega fatty acids.",
+        "image_urls": [
+          "https://example.com/bites_comp.jpg"
+        ]
+      },
+      "expected": {
+        "title": {
+          "client_len": 30,
+          "comp_len": 30,
+          "client_score": 100,
+          "issues": []
+        },
+        "bullets": {
+          "client_count": 6,
+          "comp_count": 5,
+          "client_score": 63,
+          "issues": [
+            "Too many bullets: 6 (max 5)",
+            "Bullet 1: start with a capital letter",
+            "Bullet 1: remove ending punctuation",
+            "Bullet 2: remove ending punctuation",
+            "Bullet 3: remove promotional messaging",
+            "Bullet 4: remove ending punctuation",
+            "Bullet 5: remove ending punctuation"
+          ]
+        },
+        "description": {
+          "client_len": 44,
+          "comp_len": 44,
+          "client_score": 100,
+          "issues": []
+        },
+        "images": {
+          "client_count": 1,
+          "comp_count": 1,
+          "issues": []
+        },
+        "gaps_vs_competitor": []
+      }
+    },
+    {
+      "name": "description_length_promo_check",
+      "client": {
+        "title": "PetPrime Senior Salmon Meal",
+        "bullets": [
+          "Supports healthy aging",
+          "Easy to chew"
+        ],
+        "description": "This salmon meal is crafted for senior dogs with balanced nutrition and essential omegas. This salmon meal is crafted for senior dogs with balanced nutrition and essential omegas. This salmon meal is crafted for senior dogs with balanced nutrition and essential omegas. This salmon meal is crafted for senior dogs with balanced nutrition and essential omegas. This salmon meal is crafted for senior dogs with balanced nutrition and essential omegas. This salmon meal is crafted for senior dogs with balanced nutrition and essential omegas. This salmon meal is crafted for senior dogs with balanced nutrition and essential omegas. This salmon meal is crafted for senior dogs with balanced nutrition and essential omegas. This salmon meal is crafted for senior dogs with balanced nutrition and essential omegas. This salmon meal is crafted for senior dogs with balanced nutrition and essential omegas. This salmon meal is crafted for senior dogs with balanced nutrition and essential omegas. This salmon meal is crafted for senior dogs with balanced nutrition and essential omegas. This salmon meal is crafted for senior dogs with balanced nutrition and essential omegas. This salmon meal is crafted for senior dogs with balanced nutrition and essential omegas. This salmon meal is crafted for senior dogs with balanced nutrition and essential omegas. This salmon meal is crafted for senior dogs with balanced nutrition and essential omegas. This salmon meal is crafted for senior dogs with balanced nutrition and essential omegas. This salmon meal is crafted for senior dogs with balanced nutrition and essential omegas. This salmon meal is crafted for senior dogs with balanced nutrition and essential omegas. This salmon meal is crafted for senior dogs with balanced nutrition and essential omegas. This salmon meal is crafted for senior dogs with balanced nutrition and essential omegas. This salmon meal is crafted for senior dogs with balanced nutrition and essential omegas. This salmon meal is crafted for senior dogs with balanced nutrition and essential omegas. This salmon meal is crafted for senior dogs with balanced nutrition and essential omegas. This salmon meal is crafted for senior dogs with balanced nutrition and essential omegas. Limited time discount just for you!",
+        "image_urls": [
+          "https://example.com/senior1.jpg"
+        ],
+        "brand": "PetPrime"
+      },
+      "competitor": {
+        "title": "PetPrime Senior Salmon Meal",
+        "bullets": [
+          "Supports Healthy Aging",
+          "Easy To Chew"
+        ],
+        "description": "Senior salmon recipe designed for joint and heart health.",
+        "image_urls": [
+          "https://example.com/senior_comp.jpg"
+        ]
+      },
+      "expected": {
+        "title": {
+          "client_len": 27,
+          "comp_len": 27,
+          "client_score": 100,
+          "issues": []
+        },
+        "bullets": {
+          "client_count": 2,
+          "comp_count": 2,
+          "client_score": 100,
+          "issues": []
+        },
+        "description": {
+          "client_len": 2285,
+          "comp_len": 57,
+          "client_score": 70,
+          "issues": [
+            "Description exceeds 2000 characters (len=2285)",
+            "Remove promotional language in description"
+          ]
+        },
+        "images": {
+          "client_count": 1,
+          "comp_count": 1,
+          "issues": []
+        },
+        "gaps_vs_competitor": []
+      }
+    },
+    {
+      "name": "image_and_comparison_gaps",
+      "client": {
+        "title": "PetPrime Puppy Salmon Starter",
+        "bullets": [
+          "Supports growth",
+          "DHA for brain"
+        ],
+        "description": "Balanced salmon starter formula for puppies.",
+        "image_urls": [],
+        "brand": "PetPrime"
+      },
+      "competitor": {
+        "title": "PetPrime Puppy Salmon Starter With DHA",
+        "bullets": [
+          "Supports Growth",
+          "DHA For Brain",
+          "Small Kibble Size",
+          "Calcium Rich",
+          "Puppy Approved"
+        ],
+        "description": "Nutrient-dense salmon starter for puppies with DHA and calcium.",
+        "image_urls": [
+          "https://example.com/puppy1.jpg",
+          "https://example.com/puppy2.jpg"
+        ]
+      },
+      "expected": {
+        "title": {
+          "client_len": 29,
+          "comp_len": 38,
+          "client_score": 100,
+          "issues": []
+        },
+        "bullets": {
+          "client_count": 2,
+          "comp_count": 5,
+          "client_score": 100,
+          "issues": []
+        },
+        "description": {
+          "client_len": 44,
+          "comp_len": 63,
+          "client_score": 100,
+          "issues": []
+        },
+        "images": {
+          "client_count": 0,
+          "comp_count": 2,
+          "issues": [
+            "Add at least one image"
+          ]
+        },
+        "gaps_vs_competitor": [
+          "Competitor title may include more attributes (e.g., size/material/use-case)",
+          "Add missing bullets to reach 5 concise key features",
+          "Add a concise use-case/benefit sentence in the description (<= 200 chars)",
+          "Upload additional images to match competitor coverage (white background, high-res)"
+        ]
+      }
+    }
+  ]
+}
