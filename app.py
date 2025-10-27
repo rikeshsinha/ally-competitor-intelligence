@@ -1537,7 +1537,6 @@ with left:
         client_sku_display = f"{client_sku_display} (original: {client_sku_original})"
     st.write(f"**SKU**: {client_sku_display or '—'}")
     st.write(f"**Brand**: {client_data.get('brand', '')}")
-    st.write(f"**Universe**: {client_data.get('universe', '') or '—'}")
     st.write(f"**Title**: {client_data.get('title', '')}")
     st.write("**Bullets**:")
     for b in split_bullets(client_data.get("bullets", "")):
@@ -1569,7 +1568,6 @@ with right:
         comp_sku_display = f"{comp_sku_display} (original: {comp_sku_original})"
     st.write(f"**SKU**: {comp_sku_display or '—'}")
     st.write(f"**Brand**: {comp_data.get('brand', '')}")
-    st.write(f"**Universe**: {comp_data.get('universe', '') or '—'}")
     st.write(f"**Title**: {comp_data.get('title', '')}")
     st.write("**Bullets**:")
     for b in split_bullets(comp_data.get("bullets", "")):

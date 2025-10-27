@@ -46,7 +46,6 @@ def test_selected_rows_use_dataframe_labels(stub_streamlit: _StubStreamlit) -> N
             "brand": "OtherBrand",
             "category": "Food",
             "avg_rank_search": "",
-            "universe": "US",
         },
         {
             "sku_id": "CLIENT-002",
@@ -57,7 +56,6 @@ def test_selected_rows_use_dataframe_labels(stub_streamlit: _StubStreamlit) -> N
             "brand": "ClientBrand",
             "category": "Food",
             "avg_rank_search": "1",
-            "universe": "US",
         },
         {
             "sku_id": "COMP-003",
@@ -68,7 +66,6 @@ def test_selected_rows_use_dataframe_labels(stub_streamlit: _StubStreamlit) -> N
             "brand": "CompetitorBrand",
             "category": "Food",
             "avg_rank_search": "2",
-            "universe": "US",
         },
         {
             "sku_id": "OTHER-004",
@@ -79,7 +76,6 @@ def test_selected_rows_use_dataframe_labels(stub_streamlit: _StubStreamlit) -> N
             "brand": "OtherBrand",
             "category": "Food",
             "avg_rank_search": "",
-            "universe": "US",
         },
         {
             "sku_id": "COMP-005",
@@ -90,7 +86,6 @@ def test_selected_rows_use_dataframe_labels(stub_streamlit: _StubStreamlit) -> N
             "brand": "CompetitorBrand",
             "category": "Food",
             "avg_rank_search": "3",
-            "universe": "US",
         },
         {
             "sku_id": "EXTRA-006",
@@ -101,7 +96,6 @@ def test_selected_rows_use_dataframe_labels(stub_streamlit: _StubStreamlit) -> N
             "brand": "ExtraBrand",
             "category": "Food",
             "avg_rank_search": "",
-            "universe": "US",
         },
     ]
 
@@ -116,7 +110,6 @@ def test_selected_rows_use_dataframe_labels(stub_streamlit: _StubStreamlit) -> N
         "brand_col": "brand",
         "category_col": "category",
         "avg_rank_col": "avg_rank_search",
-        "universe_col": "universe",
     }
 
     brands, brand_map = extractor._build_sku_list(df, column_map)
