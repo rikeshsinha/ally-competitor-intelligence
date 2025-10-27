@@ -1,0 +1,17 @@
+case_id,brand,image_rules,client_images,competitor_images,expected_client_count,expected_competitor_count,expected_issues,issue_expectation,gaps_vs_competitor,gap_expectation
+title_brand_promo_pack_check,PetPrime,Min count=1; Preferred min px=1000; White bg required=yes; No text watermarks=yes,https://example.com/dogfood1.jpg,https://example.com/dogfood_comp1.jpg,1,1,,Explicitly state that the content passes all listed rules without any issues.,"Competitor title may include more attributes (e.g., size/material/use-case)
+Add a concise use-case/benefit sentence in the description (<= 200 chars)","Highlight these improvement opportunities:
+Competitor title may include more attributes (e.g., size/material/use-case)
+Add a concise use-case/benefit sentence in the description (<= 200 chars)"
+bullet_capitalization_and_count,PetPrime,Min count=1; Preferred min px=1000; White bg required=yes; No text watermarks=yes,https://example.com/bites1.jpg,https://example.com/bites_comp.jpg,1,1,,Explicitly state that the content passes all listed rules without any issues.,,State that no additional competitor-driven gaps are present.
+description_length_promo_check,PetPrime,Min count=1; Preferred min px=1000; White bg required=yes; No text watermarks=yes,https://example.com/senior1.jpg,https://example.com/senior_comp.jpg,1,1,,Explicitly state that the content passes all listed rules without any issues.,,State that no additional competitor-driven gaps are present.
+image_and_comparison_gaps,PetPrime,Min count=1; Preferred min px=1000; White bg required=yes; No text watermarks=yes,,"https://example.com/puppy1.jpg
+https://example.com/puppy2.jpg",0,2,Add at least one image,"List each of these issues exactly:
+Add at least one image","Competitor title may include more attributes (e.g., size/material/use-case)
+Add missing bullets to reach 5 concise key features
+Add a concise use-case/benefit sentence in the description (<= 200 chars)
+Upload additional images to match competitor coverage (white background, high-res)","Highlight these improvement opportunities:
+Competitor title may include more attributes (e.g., size/material/use-case)
+Add missing bullets to reach 5 concise key features
+Add a concise use-case/benefit sentence in the description (<= 200 chars)
+Upload additional images to match competitor coverage (white background, high-res)"

@@ -1,0 +1,20 @@
+case_id,brand,title_rules,client_title,competitor_title,expected_client_length,expected_competitor_length,expected_score,expected_issues,issue_expectation,gaps_vs_competitor,gap_expectation
+title_brand_promo_pack_check,PetPrime,Max chars=50; Brand required=yes; Capitalize words=yes; No all caps=yes; No promo=yes; Allow pack of=yes,Ultimate Salmon Dog Food Value Sale Pack of 6,PetPrime Ultimate Salmon Dinner for Adult Dogs,45,46,60,"Brand name is missing from title
+Remove promotional language in title
+'(pack of X)' should only be used for bundles; verify correctness","List each of these issues exactly:
+Brand name is missing from title
+Remove promotional language in title
+'(pack of X)' should only be used for bundles; verify correctness","Competitor title may include more attributes (e.g., size/material/use-case)
+Add a concise use-case/benefit sentence in the description (<= 200 chars)","Highlight these improvement opportunities:
+Competitor title may include more attributes (e.g., size/material/use-case)
+Add a concise use-case/benefit sentence in the description (<= 200 chars)"
+bullet_capitalization_and_count,PetPrime,Max chars=50; Brand required=yes; Capitalize words=yes; No all caps=yes; No promo=yes; Allow pack of=yes,PetPrime Salmon Bites for Dogs,PetPrime Salmon Bites for Dogs,30,30,100,,Explicitly state that the content passes all listed rules without any issues.,,State that no additional competitor-driven gaps are present.
+description_length_promo_check,PetPrime,Max chars=50; Brand required=yes; Capitalize words=yes; No all caps=yes; No promo=yes; Allow pack of=yes,PetPrime Senior Salmon Meal,PetPrime Senior Salmon Meal,27,27,100,,Explicitly state that the content passes all listed rules without any issues.,,State that no additional competitor-driven gaps are present.
+image_and_comparison_gaps,PetPrime,Max chars=50; Brand required=yes; Capitalize words=yes; No all caps=yes; No promo=yes; Allow pack of=yes,PetPrime Puppy Salmon Starter,PetPrime Puppy Salmon Starter With DHA,29,38,100,,Explicitly state that the content passes all listed rules without any issues.,"Competitor title may include more attributes (e.g., size/material/use-case)
+Add missing bullets to reach 5 concise key features
+Add a concise use-case/benefit sentence in the description (<= 200 chars)
+Upload additional images to match competitor coverage (white background, high-res)","Highlight these improvement opportunities:
+Competitor title may include more attributes (e.g., size/material/use-case)
+Add missing bullets to reach 5 concise key features
+Add a concise use-case/benefit sentence in the description (<= 200 chars)
+Upload additional images to match competitor coverage (white background, high-res)"

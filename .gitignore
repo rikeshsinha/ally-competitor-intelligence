@@ -13,6 +13,7 @@ OPENAI_*
 # Data & large binaries you don't want public
 asin_data_filled.csv
 *.csv
+!tests/data/promptfoo/**/*.csv
 *.xlsx
 *.parquet
 *.pdf
