@@ -30,6 +30,12 @@ tests:
   - vars: {brand: BrandX, c_title: "oats 1kg", c_bullets: "high fiber|gluten free", c_desc: "whole grain oats", comp_brand: BrandY, k_title: "BrandY Rolled Oats 1 kg", k_bullets: "Source of fiber|Steel-cut texture|No added sugar", k_desc: "Whole grain oats for everyday breakfast", active_rules: file://active_rules.json}
   - file: file://golden_csvs/tiny_clean.csv
   - file: file://golden_csvs/noisy_edges.csv
+  - file: file://golden_csvs/missing_brand_token.csv
+  - file: file://golden_csvs/title_over_50_chars.csv
+  - file: file://golden_csvs/bullets_end_punctuation.csv
+  - file: file://golden_csvs/spelled_out_numerals.csv
+  - file: file://golden_csvs/pack_size_mentions.csv
+  - file: file://golden_csvs/promo_language_injection.csv
 
 assert:
   - type: javascript
