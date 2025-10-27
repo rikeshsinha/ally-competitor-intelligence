@@ -1,0 +1,46 @@
+case_id,brand,bullet_rules,client_bullets,competitor_bullets,expected_client_count,expected_competitor_count,expected_score,expected_issues,issue_expectation,gaps_vs_competitor,gap_expectation
+title_brand_promo_pack_check,PetPrime,Max count=5; Start capital=yes; Sentence fragments=no; No end punct=yes; No promo or seller info=yes; Numbers as numerals=yes; Semicolons ok=no,"High protein kibble
+Supports joint health","High Protein Formula
+Joint Support",2,2,100,,Explicitly state that the content passes all listed rules without any issues.,"Competitor title may include more attributes (e.g., size/material/use-case)
+Add a concise use-case/benefit sentence in the description (<= 200 chars)","Highlight these improvement opportunities:
+Competitor title may include more attributes (e.g., size/material/use-case)
+Add a concise use-case/benefit sentence in the description (<= 200 chars)"
+bullet_capitalization_and_count,PetPrime,Max count=5; Start capital=yes; Sentence fragments=no; No end punct=yes; No promo or seller info=yes; Numbers as numerals=yes; Semicolons ok=no,"packed with omega-3.
+Supports heart health.
+Discount available now
+Gentle on sensitive stomachs.
+Made in usa.
+Extra crunch texture","Packed With Omega-3
+Supports Joint Flexibility
+Gentle On Sensitive Stomachs
+Made In USA
+Crunchy Texture",6,5,63,"Too many bullets: 6 (max 5)
+Bullet 1: start with a capital letter
+Bullet 1: remove ending punctuation
+Bullet 2: remove ending punctuation
+Bullet 3: remove promotional messaging
+Bullet 4: remove ending punctuation
+Bullet 5: remove ending punctuation","List each of these issues exactly:
+Too many bullets: 6 (max 5)
+Bullet 1: start with a capital letter
+Bullet 1: remove ending punctuation
+Bullet 2: remove ending punctuation
+Bullet 3: remove promotional messaging
+Bullet 4: remove ending punctuation
+Bullet 5: remove ending punctuation",,State that no additional competitor-driven gaps are present.
+description_length_promo_check,PetPrime,Max count=5; Start capital=yes; Sentence fragments=no; No end punct=yes; No promo or seller info=yes; Numbers as numerals=yes; Semicolons ok=no,"Supports healthy aging
+Easy to chew","Supports Healthy Aging
+Easy To Chew",2,2,100,,Explicitly state that the content passes all listed rules without any issues.,,State that no additional competitor-driven gaps are present.
+image_and_comparison_gaps,PetPrime,Max count=5; Start capital=yes; Sentence fragments=no; No end punct=yes; No promo or seller info=yes; Numbers as numerals=yes; Semicolons ok=no,"Supports growth
+DHA for brain","Supports Growth
+DHA For Brain
+Small Kibble Size
+Calcium Rich
+Puppy Approved",2,5,100,,Explicitly state that the content passes all listed rules without any issues.,"Competitor title may include more attributes (e.g., size/material/use-case)
+Add missing bullets to reach 5 concise key features
+Add a concise use-case/benefit sentence in the description (<= 200 chars)
+Upload additional images to match competitor coverage (white background, high-res)","Highlight these improvement opportunities:
+Competitor title may include more attributes (e.g., size/material/use-case)
+Add missing bullets to reach 5 concise key features
+Add a concise use-case/benefit sentence in the description (<= 200 chars)
+Upload additional images to match competitor coverage (white background, high-res)"
