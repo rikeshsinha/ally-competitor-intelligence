@@ -1,0 +1,45 @@
+prompts:
+  - label: "ally-editor-v1"
+    messages:
+      - role: system
+        content: |
+          You are a meticulous Amazon PDP content editor. Follow the provided rules strictly.
+          Return JSON with keys: title_edit, bullets_edits (list), description_edit, rationales (list).
+      - role: user
+        content: |
+          CLIENT SKU (brand={brand}):
+          - Title: {c_title}
+          - Bullets: {c_bullets}
+          - Description: {c_desc}
+
+          COMPETITOR SKU (brand={comp_brand}):
+          - Title: {k_title}
+          - Bullets: {k_bullets}
+          - Description: {k_desc}
+
+          Active rules (JSON):
+          {active_rules}
+
+          TASK: Propose compliant TITLE, 3-5 BULLETS, DESCRIPTION.
+          Output JSON only.
+
+providers:
+  - openai:gpt-4o-mini
+
+tests:
+  - vars: {brand: BrandX, c_title: "oats 1kg", c_bullets: "high fiber|gluten free", c_desc: "whole grain oats", comp_brand: BrandY, k_title: "BrandY Rolled Oats 1 kg", k_bullets: "Source of fiber|Steel-cut texture|No added sugar", k_desc: "Whole grain oats for everyday breakfast", active_rules: file://active_rules.json}
+  - file: file://golden_csvs/tiny_clean.csv
+  - file: file://golden_csvs/noisy_edges.csv
+
+assert:
+  - type: javascript
+    value: |
+      const obj = JSON.parse($OUTPUT);
+      return !!obj && Array.isArray(obj.bullets_edits);
+  - type: json-schema
+    value: file://schema.json
+  - type: javascript
+    value: |
+      const obj = JSON.parse($OUTPUT);
+      const bad = /free shipping|% off|sale|discount/i;
+      return !bad.test(obj.title_edit) && !bad.test(obj.description_edit);

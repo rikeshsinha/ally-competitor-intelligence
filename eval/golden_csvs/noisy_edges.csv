@@ -1,0 +1,2 @@
+brand,c_title,c_bullets,c_desc,comp_brand,k_title,k_bullets,k_desc,active_rules
+BrandZ,"super long title that will likely exceed the fifty character limit to test trimming","bullet one. bullet two. bullet three. bullet four. bullet five. bullet six.","THIS IS ALL CAPS AND HAS A DISCOUNT 50% OFF!!",BrandQ,"BrandQ Product","Clean bullet A|Clean bullet B","Short description",file://active_rules.json

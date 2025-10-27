@@ -1,0 +1,32 @@
+{
+  "title": {
+    "max_chars": 50,
+    "brand_required": true,
+    "capitalize_words": true,
+    "no_all_caps": true,
+    "no_promo": true,
+    "allow_pack_of": true
+  },
+  "bullets": {
+    "max_count": 5,
+    "start_capital": true,
+    "sentence_fragments": false,
+    "no_end_punct": true,
+    "no_promo_or_seller_info": true,
+    "numbers_as_numerals": true,
+    "semicolons_ok": false
+  },
+  "description": {
+    "max_chars": 2000,
+    "no_promo": true,
+    "no_seller_info": true,
+    "sentence_caps": true,
+    "truthful_claims": true
+  },
+  "images": {
+    "min_count": 1,
+    "preferred_min_px": 1000,
+    "white_bg_required": true,
+    "no_text_watermarks": true
+  }
+}

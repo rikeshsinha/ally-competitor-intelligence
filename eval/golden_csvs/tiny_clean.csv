@@ -1,0 +1,2 @@
+brand,c_title,c_bullets,c_desc,comp_brand,k_title,k_bullets,k_desc,active_rules
+BrandX,"BrandX Oats 1 kg","High fiber|Gluten free|No added sugar","Whole grain oats",BrandY,"BrandY Rolled Oats 1 kg","Source of fiber|Steel-cut texture|No added sugar","Whole grain oats for everyday breakfast",file://active_rules.json

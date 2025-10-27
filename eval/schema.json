@@ -1,0 +1,18 @@
+{
+  "type": "object",
+  "required": ["title_edit", "bullets_edits", "description_edit", "rationales"],
+  "properties": {
+    "title_edit": {"type": "string"},
+    "bullets_edits": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 5,
+      "items": {"type": "string"}
+    },
+    "description_edit": {"type": "string"},
+    "rationales": {
+      "type": "array",
+      "items": {"type": "string"}
+    }
+  }
+}
