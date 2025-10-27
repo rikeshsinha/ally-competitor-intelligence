@@ -43,3 +43,115 @@ assert:
       const obj = JSON.parse($OUTPUT);
       const bad = /free shipping|% off|sale|discount/i;
       return !bad.test(obj.title_edit) && !bad.test(obj.description_edit);
+  - type: javascript
+    value: |
+      const fs = require('fs');
+      const path = require('path');
+
+      const potentialPaths = [
+        path.resolve(process.cwd(), 'eval', 'active_rules.json'),
+        path.resolve(process.cwd(), 'active_rules.json'),
+      ];
+
+      const rulesPath = potentialPaths.find((p) => fs.existsSync(p));
+      if (!rulesPath) {
+        throw new Error('Could not locate active_rules.json');
+      }
+
+      const rules = JSON.parse(fs.readFileSync(rulesPath, 'utf8'));
+      const output = JSON.parse($OUTPUT);
+      const brand = (vars && vars.brand ? String(vars.brand) : '').trim();
+
+      const ensure = (condition, message) => {
+        if (!condition) {
+          throw new Error(message);
+        }
+      };
+
+      const hasPromoLanguage = (text = '') => /free shipping|% off|sale|discount|deal|limited time|buy now|offer|promotion|bargain/i.test(text);
+      const hasSellerInfo = (text = '') => /call (us|now)|contact (us|me)|visit (our|the) store|seller info|guarantee|warranty|customer service/i.test(text);
+      const findAllCapsWord = (text = '') => {
+        return text
+          .split(/\s+/)
+          .map((w) => w.replace(/[^A-Za-z0-9&]/g, ''))
+          .find((w) => w.length > 1 && /[A-Z]/.test(w) && w === w.toUpperCase());
+      };
+      const isSentenceCase = (text = '') => {
+        const sentences = text
+          .split(/[.!?]+/)
+          .map((s) => s.trim())
+          .filter(Boolean);
+        if (!sentences.length) {
+          return false;
+        }
+        return sentences.every((sentence) => {
+          const firstChar = sentence.charAt(0);
+          if (!firstChar) return false;
+          if (firstChar !== firstChar.toUpperCase()) return false;
+          const rest = sentence.slice(1);
+          return !(rest && rest === rest.toUpperCase());
+        });
+      };
+
+      ensure(output && typeof output === 'object', 'Output must be JSON');
+
+      const title = (output.title_edit || '').trim();
+      ensure(title, 'title_edit must be provided');
+      ensure(title.length <= rules.title.max_chars, 'title_edit exceeds max chars');
+      if (rules.title.brand_required && brand) {
+        ensure(title.toLowerCase().includes(brand.toLowerCase()), 'title_edit must include brand');
+      }
+      if (rules.title.capitalize_words) {
+        const allowedLower = new Set(['a', 'an', 'and', 'for', 'from', 'in', 'of', 'on', 'or', 'the', 'to', 'with', 'by', 'at']);
+        const invalidWord = title.split(/\s+/).find((word) => {
+          const clean = word.replace(/[^A-Za-z0-9']/g, '');
+          if (!clean) return false;
+          if (allowedLower.has(clean.toLowerCase())) return false;
+          return /^[a-z]/.test(clean);
+        });
+        ensure(!invalidWord, `title_edit must capitalize words (problem: ${invalidWord})`);
+      }
+      if (rules.title.no_all_caps) {
+        const allCaps = findAllCapsWord(title);
+        ensure(!allCaps, `title_edit contains all-caps word: ${allCaps}`);
+      }
+      if (rules.title.no_promo) {
+        ensure(!hasPromoLanguage(title), 'title_edit contains promotional language');
+      }
+      if (rules.title.allow_pack_of === false) {
+        ensure(!/pack of/i.test(title), 'title_edit cannot include "pack of"');
+      }
+
+      ensure(Array.isArray(output.bullets_edits), 'bullets_edits must be an array');
+      const bullets = output.bullets_edits;
+      ensure(bullets.length >= 3, 'bullets_edits must include at least 3 bullets');
+      ensure(bullets.length <= rules.bullets.max_count, 'bullets_edits exceed max count');
+      bullets.forEach((bullet, index) => {
+        ensure(typeof bullet === 'string' && bullet.trim(), `bullet ${index + 1} must be a non-empty string`);
+        const trimmed = bullet.trim();
+        if (rules.bullets.start_capital) {
+          ensure(/^[A-Z]/.test(trimmed), `bullet ${index + 1} must start with a capital letter`);
+        }
+        if (rules.bullets.no_end_punct) {
+          ensure(!/[.!?]$/.test(trimmed), `bullet ${index + 1} must not end with punctuation`);
+        }
+        if (rules.bullets.no_promo_or_seller_info) {
+          ensure(!hasPromoLanguage(trimmed), `bullet ${index + 1} contains promotional language`);
+          ensure(!hasSellerInfo(trimmed), `bullet ${index + 1} contains seller information`);
+        }
+      });
+
+      const description = (output.description_edit || '').trim();
+      ensure(description, 'description_edit must be provided');
+      ensure(description.length <= rules.description.max_chars, 'description_edit exceeds max chars');
+      if (rules.description.sentence_caps) {
+        ensure(isSentenceCase(description), 'description_edit must use sentence case');
+      }
+      if (rules.description.no_promo) {
+        ensure(!hasPromoLanguage(description), 'description_edit contains promotional language');
+      }
+      if (rules.description.no_seller_info) {
+        ensure(!hasSellerInfo(description), 'description_edit contains seller information');
+      }
+
+      return true;
