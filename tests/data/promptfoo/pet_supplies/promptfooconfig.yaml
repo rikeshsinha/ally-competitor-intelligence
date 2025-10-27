@@ -1,135 +1,184 @@
 version: 1
-description: >-
-  Promptfoo configuration for evaluating pet supplies listing compliance rules
-  across title, bullet, description, and image dimensions.
+description: Promptfoo configuration for evaluating pet supplies listing compliance
+  rules across title, bullet, description, and image dimensions.
 providers:
-  # Replace with the provider you want to evaluate (e.g., openai:gpt-4o-mini)
-  - id: openai:gpt-4o-mini
-    config:
-      apiKey: ${OPENAI_API_KEY}
+- id: openai:gpt-4o-mini
+  config:
+    apiKey: ${OPENAI_API_KEY}
 prompts:
-  - label: pet-supplies-title
-    prompt: |-
-      You are a marketplace content compliance expert. Review the product title against the
-      provided rules and competitor reference. Always respond with a JSON object containing
-      these keys: score (0-100 integer), issues (array of strings), rationale (string), and
-      competitor_gaps (array of strings).
+- id: pet-supplies-title
+  raw: 'You are a marketplace content compliance expert. Review the product title
+    against the
 
-      Rules to apply:
-      {{title_rules}}
+    provided rules and competitor reference. Always respond with a JSON object containing
 
-      Brand: {{brand}}
-      Client title (evaluate): {{client_title}}
-      Competitor title (reference only): {{competitor_title}}
+    these keys: score (0-100 integer), issues (array of strings), rationale (string),
+    and
 
-      Score the client title for compliance, list any rule violations, and surface additional
-      content opportunities compared with the competitor title.
-  - label: pet-supplies-bullets
-    prompt: |-
-      You are a marketplace content compliance expert. Review the client bullet list against the
-      provided rules and competitor reference. Respond with JSON containing keys: score
-      (0-100 integer), issues (array of strings), rationale (string), and competitor_gaps (array
-      of strings).
+    competitor_gaps (array of strings).
 
-      Rules to apply:
-      {{bullet_rules}}
 
-      Brand: {{brand}}
-      Client bullets (one per line):
-      {{client_bullets}}
+    Rules to apply:
 
-      Competitor bullets (one per line):
-      {{competitor_bullets}}
+    {{title_rules}}
 
-      Score the client bullet list for compliance, list any rule violations, and capture
-      opportunities to match or exceed the competitor bullets.
-  - label: pet-supplies-description
-    prompt: |-
-      You are a marketplace content compliance expert. Review the product description against the
-      provided rules and competitor reference. Respond with JSON containing keys: score
-      (0-100 integer), issues (array of strings), rationale (string), and competitor_gaps (array
-      of strings).
 
-      Rules to apply:
-      {{description_rules}}
+    Brand: {{brand}}
 
-      Brand: {{brand}}
-      Client description:
-      {{client_description}}
+    Client title (evaluate): {{client_title}}
 
-      Competitor description:
-      {{competitor_description}}
+    Competitor title (reference only): {{competitor_title}}
 
-      Score the client description for compliance, list any rule violations, and surface
-      opportunities to differentiate versus the competitor description.
-  - label: pet-supplies-images
-    prompt: |-
-      You are a marketplace content compliance expert. Review the product imagery set against the
-      provided rules and competitor reference. Respond with JSON containing keys: client_image_count
-      (integer), competitor_image_count (integer), issues (array of strings), rationale (string), and
-      competitor_gaps (array of strings).
 
-      Rules to apply:
-      {{image_rules}}
+    Score the client title for compliance, list any rule violations, and surface additional
 
-      Brand: {{brand}}
-      Client image URLs (newline separated):
-      {{client_images}}
+    content opportunities compared with the competitor title.'
+- id: pet-supplies-bullets
+  raw: 'You are a marketplace content compliance expert. Review the client bullet
+    list against the
 
-      Competitor image URLs (newline separated):
-      {{competitor_images}}
+    provided rules and competitor reference. Respond with JSON containing keys: score
 
-      Count the images for each listing, flag rule violations, and summarize any gaps compared to
-      the competitor imagery coverage.
+    (0-100 integer), issues (array of strings), rationale (string), and competitor_gaps
+    (array
+
+    of strings).
+
+
+    Rules to apply:
+
+    {{bullet_rules}}
+
+
+    Brand: {{brand}}
+
+    Client bullets (one per line):
+
+    {{client_bullets}}
+
+
+    Competitor bullets (one per line):
+
+    {{competitor_bullets}}
+
+
+    Score the client bullet list for compliance, list any rule violations, and capture
+
+    opportunities to match or exceed the competitor bullets.'
+- id: pet-supplies-description
+  raw: 'You are a marketplace content compliance expert. Review the product description
+    against the
+
+    provided rules and competitor reference. Respond with JSON containing keys: score
+
+    (0-100 integer), issues (array of strings), rationale (string), and competitor_gaps
+    (array
+
+    of strings).
+
+
+    Rules to apply:
+
+    {{description_rules}}
+
+
+    Brand: {{brand}}
+
+    Client description:
+
+    {{client_description}}
+
+
+    Competitor description:
+
+    {{competitor_description}}
+
+
+    Score the client description for compliance, list any rule violations, and surface
+
+    opportunities to differentiate versus the competitor description.'
+- id: pet-supplies-images
+  raw: 'You are a marketplace content compliance expert. Review the product imagery
+    set against the
+
+    provided rules and competitor reference. Respond with JSON containing keys: client_image_count
+
+    (integer), competitor_image_count (integer), issues (array of strings), rationale
+    (string), and
+
+    competitor_gaps (array of strings).
+
+
+    Rules to apply:
+
+    {{image_rules}}
+
+
+    Brand: {{brand}}
+
+    Client image URLs (newline separated):
+
+    {{client_images}}
+
+
+    Competitor image URLs (newline separated):
+
+    {{competitor_images}}
+
+
+    Count the images for each listing, flag rule violations, and summarize any gaps
+    compared to
+
+    the competitor imagery coverage.'
 tests:
-  - description: Title compliance evaluations
-    prompt: pet-supplies-title
-    dataset:
-      path: tests/data/promptfoo/pet_supplies/title_evaluations.csv
-    assert:
-      - type: llm-rubric
-        value: |-
-          Confirm the response assigns a compliance score of {{expected_score}}, follows the JSON
-          response contract, and {{issue_expectation}}
-      - type: llm-rubric
-        value: |-
-          Confirm the response {{gap_expectation}}
-  - description: Bullet compliance evaluations
-    prompt: pet-supplies-bullets
-    dataset:
-      path: tests/data/promptfoo/pet_supplies/bullet_evaluations.csv
-    assert:
-      - type: llm-rubric
-        value: |-
-          Confirm the response assigns a compliance score of {{expected_score}}, follows the JSON
-          response contract, and {{issue_expectation}}
-      - type: llm-rubric
-        value: |-
-          Confirm the response {{gap_expectation}}
-  - description: Description compliance evaluations
-    prompt: pet-supplies-description
-    dataset:
-      path: tests/data/promptfoo/pet_supplies/description_evaluations.csv
-    assert:
-      - type: llm-rubric
-        value: |-
-          Confirm the response assigns a compliance score of {{expected_score}}, follows the JSON
-          response contract, and {{issue_expectation}}
-      - type: llm-rubric
-        value: |-
-          Confirm the response {{gap_expectation}}
-  - description: Image coverage evaluations
-    prompt: pet-supplies-images
-    dataset:
-      path: tests/data/promptfoo/pet_supplies/image_evaluations.csv
-    assert:
-      - type: llm-rubric
-        value: |-
-          Confirm the response reports the client image count as {{expected_client_count}} and the
-          competitor image count as {{expected_competitor_count}} while following the JSON contract.
-      - type: llm-rubric
-        value: |-
-          Confirm the response {{issue_expectation}}
-      - type: llm-rubric
-        value: |-
-          Confirm the response {{gap_expectation}}
+- description: Title compliance evaluations
+  prompt: pet-supplies-title
+  dataset:
+    path: tests/data/promptfoo/pet_supplies/title_evaluations.csv
+  assert:
+  - type: llm-rubric
+    value: 'Confirm the response assigns a compliance score of {{expected_score}},
+      follows the JSON
+
+      response contract, and {{issue_expectation}}'
+  - type: llm-rubric
+    value: Confirm the response {{gap_expectation}}
+- description: Bullet compliance evaluations
+  prompt: pet-supplies-bullets
+  dataset:
+    path: tests/data/promptfoo/pet_supplies/bullet_evaluations.csv
+  assert:
+  - type: llm-rubric
+    value: 'Confirm the response assigns a compliance score of {{expected_score}},
+      follows the JSON
+
+      response contract, and {{issue_expectation}}'
+  - type: llm-rubric
+    value: Confirm the response {{gap_expectation}}
+- description: Description compliance evaluations
+  prompt: pet-supplies-description
+  dataset:
+    path: tests/data/promptfoo/pet_supplies/description_evaluations.csv
+  assert:
+  - type: llm-rubric
+    value: 'Confirm the response assigns a compliance score of {{expected_score}},
+      follows the JSON
+
+      response contract, and {{issue_expectation}}'
+  - type: llm-rubric
+    value: Confirm the response {{gap_expectation}}
+- description: Image coverage evaluations
+  prompt: pet-supplies-images
+  dataset:
+    path: tests/data/promptfoo/pet_supplies/image_evaluations.csv
+  assert:
+  - type: llm-rubric
+    value: 'Confirm the response reports the client image count as {{expected_client_count}}
+      and the
+
+      competitor image count as {{expected_competitor_count}} while following the
+      JSON contract.'
+  - type: llm-rubric
+    value: Confirm the response {{issue_expectation}}
+  - type: llm-rubric
+    value: Confirm the response {{gap_expectation}}
