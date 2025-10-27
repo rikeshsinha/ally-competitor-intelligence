@@ -3,8 +3,7 @@ description: Promptfoo configuration for evaluating pet supplies listing complia
   rules across title, bullet, description, and image dimensions.
 providers:
 - id: openai:gpt-4o-mini
-  config:
-    apiKey: ${OPENAI_API_KEY}
+
 prompts:
 - id: pet-supplies-title
   raw: 'You are a marketplace content compliance expert. Review the product title
