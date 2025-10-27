@@ -1,0 +1,2 @@
+brand,c_title,c_bullets,c_desc,comp_brand,k_title,k_bullets,k_desc,active_rules
+TempoPulse,"TempoPulse Smart Fitness Tracker","Tracks heart rate all day|Three personalized workout zones|Seven day battery life","Monitor wellness stats and stay motivated with guided workouts in the app.",PulsePeak,"PulsePeak Fitness Tracker","24/7 heart rate tracking|3 workout intensity zones|7-day battery","Health insights and coaching in companion app",file://active_rules.json
