@@ -293,7 +293,6 @@ class _SKUExtractor:
             "images_col": pick("image_urls", "images", "image", "image_url"),
             "brand_col": pick("brand", "brand_name", "retailer_brand_name"),
             "category_col": pick("category", "node", "retailer_category_node"),
-            "universe_col": pick("universe"),
             "avg_rank_col": pick("avg_rank_search", default=pd.NA),
         }
 
@@ -661,11 +660,6 @@ class _SKUExtractor:
             "category": row.iloc[0][column_map["category_col"]],
             "avg_rank_search": row.iloc[0][column_map["avg_rank_col"]],
         }
-        uni_col = column_map.get("universe_col")
-        if uni_col in row.columns:
-            record["universe"] = row.iloc[0][uni_col]
-        else:
-            record["universe"] = None
         return record
 
     def _select_row(self, df: pd.DataFrame, row_index: Any) -> pd.DataFrame:
