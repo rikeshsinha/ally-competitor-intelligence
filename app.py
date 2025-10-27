@@ -1699,6 +1699,7 @@ if issues_gaps_version != stored_issues_gaps_version:
     st.session_state.pop("llm_out_meta", None)
     st.session_state.pop("selected_variant_index", None)
     st.session_state.pop(stop_key, None)
+    st.session_state.pop("issues_gaps_user_context_used_count", None)
 else:
     st.session_state.setdefault("issues_gaps_message", issues_gaps_message)
     history = st.session_state.setdefault(chat_history_key, [])
@@ -1767,8 +1768,36 @@ if user_reply:
                 normalized = re.sub(r"\s+", " ", content)
                 if normalized:
                     user_context_entries.append(normalized)
+            last_used_count = st.session_state.get(
+                "issues_gaps_user_context_used_count", 0
+            )
+            if last_used_count < 0:
+                last_used_count = 0
+            if user_context_entries:
+                last_used_count = min(last_used_count, len(user_context_entries))
+            new_entries = user_context_entries[last_used_count:]
+            prior_entries = user_context_entries[:last_used_count]
+
+            prioritized_sections: List[str] = []
+            if new_entries:
+                prioritized_sections.append(
+                    "LATEST USER INPUTS (highest priority; follow these updates first):\n"
+                    + "\n".join(new_entries)
+                )
+            if prior_entries:
+                prioritized_sections.append(
+                    "Earlier user guidance for context:\n" + "\n".join(prior_entries)
+                )
+
+            user_context_str = (
+                "\n\n".join(prioritized_sections).strip()
+                if prioritized_sections
+                else None
+            )
             st.session_state["issues_gaps_user_context"] = user_context_entries
-            user_context_str = "\n".join(user_context_entries) if user_context_entries else None
+            st.session_state["issues_gaps_user_context_used_count"] = len(
+                user_context_entries
+            )
 
             with st.spinner(
                 "Consulting OpenAI for brand-safe edits and preparing fallbacks..."
