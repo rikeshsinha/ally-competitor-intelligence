@@ -101,10 +101,12 @@ def _coerce_string_list(raw: Any) -> List[str]:
 
 
 def split_bullets(raw: Any) -> List[str]:
+    """Normalize bullet inputs into a list of clean strings."""
     return _coerce_string_list(raw)
 
 
 def _extract_urls_from_text(text: str) -> List[str]:
+    """Pull plausible image URLs from a blob of text."""
     pieces = re.split(r"[\s,|]+", text)
     return [
         p
@@ -114,10 +116,12 @@ def _extract_urls_from_text(text: str) -> List[str]:
 
 
 def _count_urls_from_text(text: str) -> int:
+    """Count the number of probable image URLs inside the provided text."""
     return len(_extract_urls_from_text(text))
 
 
 def extract_image_urls(raw: Any) -> List[str]:
+    """Extract usable image URLs from mixed formats such as JSON strings or lists."""
     urls = _coerce_string_list(raw)
     if urls:
         if isinstance(raw, str):
@@ -135,10 +139,12 @@ def extract_image_urls(raw: Any) -> List[str]:
 
 
 def count_images(raw: Any) -> int:
+    """Return the number of images present in the input field."""
     return len(extract_image_urls(raw))
 
 
 def has_promo_terms(text: str) -> bool:
+    """Detect promotional or marketing phrasing that may violate rules."""
     if not isinstance(text, str):
         return False
     promo = [
@@ -156,6 +162,7 @@ def has_promo_terms(text: str) -> bool:
 
 
 def is_all_caps(text: str) -> bool:
+    """Determine whether the input contains alphabetic characters in all caps."""
     if not isinstance(text, str):
         return False
     letters = [c for c in text if c.isalpha()]
@@ -163,6 +170,7 @@ def is_all_caps(text: str) -> bool:
 
 
 def enforce_title_caps(text: str) -> str:
+    """Apply title casing while keeping certain short words lowercase."""
     words = text.split()
     fixed = []
     for i, w in enumerate(words):

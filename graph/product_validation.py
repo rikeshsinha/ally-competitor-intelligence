@@ -21,6 +21,7 @@ class ProductValidationState(TypedDict, total=False):
 def build_product_validation_graph(
     validation_fn: Callable[[SKUData, RuleExtraction], Dict[str, Any]],
 ):
+    """Construct the LangGraph pipeline that extracts SKUs, rules, then validates."""
     sku_chain = create_sku_extractor()
     rule_chain = create_rule_extractor()
 

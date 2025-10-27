@@ -109,6 +109,7 @@ def validate_openai_key() -> Tuple[bool, str]:
 
 
 def get_validation_graph() -> Any:
+    """Build and cache the validation workflow graph on first use."""
     if "product_validation_graph" not in st.session_state:
 
         def _run_validation(
@@ -134,6 +135,7 @@ def _trigger_rerun() -> None:
 
 
 def _format_brand_dropdown_label(option: Optional[Dict[str, Any]]) -> str:
+    """Return a friendly label for a brand option in select widgets."""
     if not option:
         return "Select a brand"
     brand_name = str(option.get("brand", "")).strip() or "Unnamed brand"
@@ -144,6 +146,7 @@ def _format_brand_dropdown_label(option: Optional[Dict[str, Any]]) -> str:
 
 
 def _format_product_dropdown_label(option: Optional[Dict[str, Any]]) -> str:
+    """Return a human-readable label for a product option entry."""
     if not option:
         return "Select a product"
     title = (
@@ -159,6 +162,7 @@ def _format_product_dropdown_label(option: Optional[Dict[str, Any]]) -> str:
 def _get_brand_record(
     brand_groups: List[Dict[str, Any]], brand_name: Optional[str]
 ) -> Optional[Dict[str, Any]]:
+    """Find the brand metadata dictionary that matches the supplied name."""
     if not brand_name:
         return None
     for record in brand_groups:
@@ -170,6 +174,7 @@ def _get_brand_record(
 def _get_option_for_selection(
     selection: Dict[str, Any] | None, options: List[Dict[str, Any]]
 ) -> Optional[Dict[str, Any]]:
+    """Locate the option entry that aligns with a persisted selection record."""
     if not isinstance(selection, dict):
         return None
     target_row = selection.get("row_index")
@@ -202,6 +207,7 @@ _AUTO_COMPETITOR_SESSION_KEYS = (
 
 
 def _clear_auto_competitor_state() -> None:
+    """Remove any auto-selection state so the chooser can start fresh."""
     for key in _AUTO_COMPETITOR_SESSION_KEYS:
         st.session_state.pop(key, None)
 
@@ -312,6 +318,7 @@ Ally (Competitor Content Intelligence)
 def _clear_client_selection_state(
     *, keep_choices: bool = True, reset_version: bool = False, clear_widget_keys: bool = False
 ) -> None:
+    """Reset stored client selection state while optionally preserving choices."""
     product_key = st.session_state.pop("client_product_select_key", None)
     if product_key:
         st.session_state.pop(product_key, None)
@@ -330,6 +337,7 @@ def _clear_client_selection_state(
 
 
 def _clear_competitor_selection_state(*, keep_choices: bool = False) -> None:
+    """Reset competitor selection state and optionally keep cached choices."""
     product_key = st.session_state.pop("competitor_product_select_key", None)
     if product_key:
         st.session_state.pop(product_key, None)
@@ -351,6 +359,7 @@ def _clear_competitor_selection_state(*, keep_choices: bool = False) -> None:
 
 
 def _set_competitor_selection_mode(mode: str) -> None:
+    """Switch between manual and automatic competitor selection flows."""
     normalized = mode.strip().lower()
     current = st.session_state.get("competitor_selection_mode")
     if current == normalized:
@@ -366,6 +375,7 @@ def _set_competitor_selection_mode(mode: str) -> None:
 def _format_auto_competitor_option(
     idx: int, recommendations: List[Dict[str, Any]]
 ) -> str:
+    """Summarize an auto-recommended competitor for display in a selectbox."""
     if idx < 0 or idx >= len(recommendations):
         return "Select a recommended competitor"
     candidate = recommendations[idx]
@@ -392,6 +402,7 @@ def _format_auto_competitor_option(
 
 
 def _build_sku_data_for_auto() -> Optional[SKUData]:
+    """Assemble SKUData from session state for automatic competitor matching."""
     state = st.session_state.get("_sku_extractor_state")
     if not isinstance(state, dict):
         return None
@@ -424,6 +435,7 @@ def _build_sku_data_for_auto() -> Optional[SKUData]:
 
 
 def _match_auto_candidate_to_option(candidate: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """Map an auto-suggested competitor back to the available UI options."""
     choices = st.session_state.get("competitor_choices")
     if not isinstance(choices, dict):
         return None
@@ -476,6 +488,7 @@ def _match_auto_candidate_to_option(candidate: Dict[str, Any]) -> Optional[Dict[
 
 
 def _render_competitor_mode_prompt(*, key_namespace: str = "competitor_mode") -> None:
+    """Present controls allowing the user to pick manual or auto competitor mode."""
     mode = st.session_state.get("competitor_selection_mode")
 
     with st.chat_message("assistant"):
@@ -503,6 +516,7 @@ def _render_competitor_mode_prompt(*, key_namespace: str = "competitor_mode") ->
 def _apply_auto_selection(
     choice_idx: int, recommendations: List[Dict[str, Any]]
 ) -> Optional[Dict[str, Any]]:
+    """Persist a recommended competitor option after the user confirms it."""
     if choice_idx < 0 or choice_idx >= len(recommendations):
         return None
     candidate = recommendations[choice_idx]
@@ -548,6 +562,7 @@ def _apply_auto_selection(
 
 
 def _render_auto_competitor_selection_ui() -> Optional[Dict[str, Any]]:
+    """Show the auto-selection chat flow and return the confirmed competitor."""
     sku_data = _build_sku_data_for_auto()
     if sku_data is None:
         return None
@@ -630,6 +645,7 @@ def _render_auto_competitor_selection_ui() -> Optional[Dict[str, Any]]:
 
 
 def _render_client_selection_ui() -> Optional[Dict[str, Any]]:
+    """Render the chat-based client picker and return the selected record."""
     choices = st.session_state.get("client_choices")
     if not isinstance(choices, dict):
         return st.session_state.get("selected_client")
@@ -781,6 +797,7 @@ def _render_client_selection_ui() -> Optional[Dict[str, Any]]:
 
 
 def _render_competitor_selection_ui() -> Optional[Dict[str, Any]]:
+    """Display manual competitor pickers and track the confirmed selection."""
     if st.session_state.get("competitor_selection_mode") != "manual":
         return st.session_state.get("selected_competitor")
 
@@ -960,6 +977,7 @@ def call_llm(
     rules: Dict[str, Any],
     user_context: Optional[str] = None,
 ) -> Dict[str, Any]:
+    """Generate copy suggestions, falling back to heuristics when no LLM is set."""
     client = get_openai_client()
     prompt = USER_PROMPT_TEMPLATE.format(
         brand=client_data.get("brand", ""),
@@ -1165,6 +1183,7 @@ def call_llm(
 
 
 def _format_rules_for_answer(rules: Dict[str, Any]) -> str:
+    """Create a concise, human-readable bullet list of rule constraints."""
     title_rules = rules.get("title", {})
     bullet_rules = rules.get("bullets", {})
     desc_rules = rules.get("description", {})
@@ -1188,6 +1207,7 @@ def _format_rules_for_answer(rules: Dict[str, Any]) -> str:
 
 
 def _summarize_product(label: str, data: Dict[str, Any]) -> str:
+    """Render a markdown summary of product metadata for review answers."""
     bullets = [
         f"• {b}" for b in split_bullets(data.get("bullets", "")) if str(b).strip()
     ]
@@ -1215,6 +1235,7 @@ def _fallback_answer(
     client_text: str,
     competitor_text: str,
 ) -> str:
+    """Build a deterministic answer that cites the uploaded context."""
     lower_q = question.lower()
     sections: List[str] = []
     if any(token in lower_q for token in ["rule", "guideline", "limit", "allow"]):
@@ -1243,6 +1264,7 @@ def answer_review_question(
     competitor_data: Dict[str, Any],
     client: Optional[OpenAI] = None,
 ) -> Tuple[str, List[str]]:
+    """Generate an answer chunk list for the review follow-up question dialog."""
     rule_text = _format_rules_for_answer(current_rules)
     client_text = _summarize_product("Client SKU", client_data)
     competitor_text = _summarize_product("Competitor SKU", competitor_data)
@@ -1469,6 +1491,7 @@ with st.sidebar.expander("Active rules JSON"):
 
 
 def _display_rule_messages(messages: Any) -> bool:
+    """Render sidebar alerts about rule extraction and signal if any were shown."""
     seen = set()
     displayed = False
     for item in messages or []:
@@ -1578,6 +1601,7 @@ desc_limit = rules_for_display["description"]["max_chars"]
 
 
 def _format_rules_notes(notes: Any) -> str:
+    """Flatten any rule notes into a short description string for captions."""
     if not notes:
         return ""
     if isinstance(notes, (list, tuple)):
