@@ -1,6 +1,6 @@
-# Ally Competitor Content Intelligence (Streamlit)
+# Ally Competitor Content Intelligence 
 
-A demo skill for comparing a client SKU vs. a competitor’s SKU, checking Amazon style rules, drafting LLM-powered edits, and producing a final Markdown summary + email.
+A demo skill made with streamlit UI for comparing a client SKU vs. a competitor’s SKU, checking Amazon style rules, drafting LLM-powered edits, and producing a final Markdown summary + email.
 
 ## What it does
 - Load a CSV of SKUs that includes both client and competitor products.
