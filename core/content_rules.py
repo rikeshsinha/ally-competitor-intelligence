@@ -281,13 +281,13 @@ def rule_check_description(desc: str, rules: Dict[str, Any]) -> Tuple[int, List[
         issues.append(
             f"Description exceeds {rules['max_chars']} characters (len={len(d)})"
         )
-        score -= 20
+        score -= 25
     if rules.get("no_promo") and has_promo_terms(d):
         issues.append("Remove promotional language in description")
-        score -= 10
+        score -= 25
     if rules.get("sentence_caps") and is_all_caps(d):
         issues.append("Avoid ALL CAPS in description")
-        score -= 5
+        score -= 25
     return max(score, 0), issues
 
 
