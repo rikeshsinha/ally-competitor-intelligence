@@ -6,9 +6,10 @@ import copy
 import io
 import json
 import os
+import math
 import tempfile
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 try:  # Optional dependency; handled gracefully if unavailable
     from langchain_community.document_loaders import PyPDFLoader  # type: ignore
@@ -37,6 +38,11 @@ try:  # Optional OpenAI dependency – same guard pattern as in app.py
     from openai import OpenAI
 except Exception:  # pragma: no cover - optional dependency guard
     OpenAI = None  # type: ignore
+
+try:  # Optional sentence-transformers embedder
+    from sentence_transformers import SentenceTransformer  # type: ignore
+except Exception:  # pragma: no cover - optional dependency guard
+    SentenceTransformer = None  # type: ignore
 
 from langchain_core.runnables import RunnableLambda
 
@@ -122,12 +128,12 @@ def _read_uploaded_content(file_obj: UploadedContent) -> bytes:
     return b""
 
 
-def _extract_text_from_pdf(pdf_bytes: bytes) -> Tuple[str, List[str]]:
+def _extract_text_from_pdf(pdf_bytes: bytes) -> Tuple[List[str], List[str]]:
     """Best-effort PDF text extraction with langchain/PyPDF fallbacks."""
     errors: List[str] = []
     if not pdf_bytes:
         errors.append("Uploaded PDF is empty or unreadable")
-        return "", errors
+        return [], errors
 
     # Preferred path: use langchain loader + splitter when available.
     if PyPDFLoader is not None and RecursiveCharacterTextSplitter is not None:
@@ -150,8 +156,7 @@ def _extract_text_from_pdf(pdf_bytes: bytes) -> Tuple[str, List[str]]:
                 )
                 if combined.strip():
                     chunks = splitter.split_text(combined)
-                    context = "\n\n".join(chunks[:5])
-                    return context, errors
+                    return chunks, errors
                 errors.append("PDF text content is empty")
         except Exception as exc:  # pragma: no cover - depends on runtime PDFs
             errors.append(f"Langchain PDF parse failed: {exc}")
@@ -167,7 +172,7 @@ def _extract_text_from_pdf(pdf_bytes: bytes) -> Tuple[str, List[str]]:
     # Fallback: use PyPDF to extract raw text if langchain path unavailable/failed.
     if PdfReader is None:
         errors.append("PyPDF fallback unavailable; using default rules")
-        return "", errors
+        return [], errors
 
     try:
         reader = PdfReader(io.BytesIO(pdf_bytes))
@@ -183,7 +188,7 @@ def _extract_text_from_pdf(pdf_bytes: bytes) -> Tuple[str, List[str]]:
         combined = "\n\n".join(pages_text).strip()
         if not combined:
             errors.append("PDF text content is empty")
-            return "", errors
+            return [], errors
 
         if RecursiveCharacterTextSplitter is not None:
             splitter = RecursiveCharacterTextSplitter(
@@ -197,11 +202,10 @@ def _extract_text_from_pdf(pdf_bytes: bytes) -> Tuple[str, List[str]]:
                 for i in range(0, len(combined), chunk_size)
             ]
 
-        context = "\n\n".join(chunks[:5])
-        return context, errors
+        return chunks, errors
     except Exception as exc:  # pragma: no cover - depends on runtime PDFs
         errors.append(f"Failed to parse PDF with PyPDF: {exc}")
-        return "", errors
+        return [], errors
 
 
 def _coerce_bool(value: Any, default: bool) -> bool:
@@ -248,10 +252,68 @@ def _merge_rules(
     return merged
 
 
+def _cosine_similarity(vec_a: List[float], vec_b: List[float]) -> float:
+    """Compute cosine similarity between two vectors with graceful fallbacks."""
+
+    if not vec_a or not vec_b or len(vec_a) != len(vec_b):
+        return 0.0
+
+    dot = sum(a * b for a, b in zip(vec_a, vec_b))
+    norm_a = math.sqrt(sum(a * a for a in vec_a))
+    norm_b = math.sqrt(sum(b * b for b in vec_b))
+    if norm_a == 0 or norm_b == 0:
+        return 0.0
+    return dot / (norm_a * norm_b)
+
+
+def _select_context_chunks(
+    chunks: List[str], embedder: Optional[Callable[[List[str]], List[List[float]]]], errors: List[str]
+) -> List[str]:
+    """Return the most relevant chunks for domain queries using embeddings."""
+
+    if not embedder or not chunks:
+        return []
+
+    domain_queries = [
+        "rules for bullet points",
+        "title content requirements",
+        "product description guidelines",
+        "image requirements and standards",
+    ]
+
+    try:
+        chunk_embeddings = embedder(chunks)
+        query_embeddings = embedder(domain_queries)
+    except Exception as exc:  # pragma: no cover - embedder runtime dependent
+        errors.append(f"Embedding generation failed: {exc}")
+        return []
+
+    if not chunk_embeddings or not query_embeddings:
+        return []
+
+    scored: Dict[int, float] = {}
+    for query_emb in query_embeddings:
+        best_idx: Optional[int] = None
+        best_score = -1.0
+        for idx, chunk_emb in enumerate(chunk_embeddings):
+            score = _cosine_similarity(query_emb, chunk_emb)
+            if score > best_score:
+                best_idx = idx
+                best_score = score
+        if best_idx is not None:
+            scored[best_idx] = max(best_score, scored.get(best_idx, -1.0))
+
+    ranked_indices = [
+        idx for idx, _ in sorted(scored.items(), key=lambda item: item[1], reverse=True)
+    ]
+    return [chunks[idx] for idx in ranked_indices[:5]]
+
+
 def extract_rules_config(
     uploaded: UploadedContent,
     llm_client: Any,
     default_rules: Dict[str, Any],
+    embedder: Optional[Callable[[List[str]], List[List[float]]]] = None,
 ) -> Tuple[Dict[str, Any], List[str]]:
     """Parse a PDF and synthesize rule configuration."""
 
@@ -261,10 +323,14 @@ def extract_rules_config(
         errors.append("Could not read uploaded PDF bytes")
         return copy.deepcopy(default_rules), errors
 
-    context, parse_errors = _extract_text_from_pdf(pdf_bytes)
+    chunks, parse_errors = _extract_text_from_pdf(pdf_bytes)
     errors.extend(parse_errors)
-    if not context:
+    if not chunks:
         return copy.deepcopy(default_rules), errors
+
+    selected_chunks = _select_context_chunks(chunks, embedder, errors)
+    context_chunks = selected_chunks if selected_chunks else chunks[:5]
+    context = "\n\n".join(context_chunks)
 
     if llm_client is None:
         errors.append("LLM client unavailable; falling back to default rules")
@@ -313,8 +379,9 @@ class _RuleExtractorRunnable:
     def __call__(self, inputs: Dict[str, Any]) -> RuleExtraction:  # type: ignore[override]
         rules_file = inputs.get("rules_file") if isinstance(inputs, dict) else None
         llm_client = self._get_llm_client()
+        embedder = self._get_embedder()
         rules, messages = extract_rules_config(
-            rules_file, llm_client, self._default_rules
+            rules_file, llm_client, self._default_rules, embedder
         )
 
         # Determine the rules provenance for downstream display.
@@ -328,20 +395,22 @@ class _RuleExtractorRunnable:
 
         return RuleExtraction(rules=rules, messages=list(messages), source=source)
 
+    def _get_api_key(self) -> Optional[str]:
+        """Return the OpenAI API key from Streamlit or environment."""
+
+        if st is not None:
+            return st.session_state.get("OPENAI_API_KEY_UI") or os.getenv(
+                "OPENAI_API_KEY"
+            )
+        return os.getenv("OPENAI_API_KEY")
+
     def _get_llm_client(self) -> Any:
         """Best-effort construction of an OpenAI client, mirroring app logic."""
 
         if OpenAI is None:
             return None
 
-        api_key: Optional[str] = None
-        if st is not None:
-            api_key = st.session_state.get("OPENAI_API_KEY_UI") or os.getenv(
-                "OPENAI_API_KEY"
-            )
-        else:
-            api_key = os.getenv("OPENAI_API_KEY")
-
+        api_key = self._get_api_key()
         if not api_key:
             return None
 
@@ -349,6 +418,36 @@ class _RuleExtractorRunnable:
             return OpenAI(api_key=api_key)
         except Exception:
             return None
+
+    def _get_embedder(self) -> Optional[Callable[[List[str]], List[List[float]]]]:
+        """Return an embedding callable if optional dependencies permit."""
+
+        if SentenceTransformer is not None:
+            try:
+                model = SentenceTransformer("all-MiniLM-L6-v2")
+                return model.encode
+            except Exception:
+                pass
+
+        if OpenAI is None:
+            return None
+
+        api_key = self._get_api_key()
+        if not api_key:
+            return None
+
+        try:
+            client = OpenAI(api_key=api_key)
+        except Exception:
+            return None
+
+        def _embed(texts: List[str]) -> List[List[float]]:
+            response = client.embeddings.create(
+                model="text-embedding-3-small", input=texts
+            )
+            return [data.embedding for data in response.data]
+
+        return _embed
 
 
 def create_rule_extractor() -> RunnableLambda:
